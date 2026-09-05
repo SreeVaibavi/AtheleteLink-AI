@@ -57,57 +57,40 @@ async function handleAdminLogin(e) {
     const errorEl = document.getElementById("admin-login-error");
     if (errorEl) errorEl.classList.add("hidden");
 
-    let data;
     try {
         const res = await fetch((window.APP_CONFIG?.API_BASE_URL || "/api") + "/auth/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password })
         });
-        data = await res.json();
+        const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Invalid admin credentials");
-    } catch (err) {
-        // Fallback for GitHub Pages static hosting or offline demo
-        if (email === "admin@athletelink.ai" && (password === "Admin@123" || password.length > 0)) {
-            data = {
-                token: "demo-jwt-token-gh-pages-admin",
-                userId: 1,
-                fullName: "Platform Administrator",
-                email: "admin@athletelink.ai",
-                role: "ADMIN"
-            };
-        } else {
-            if (errorEl) {
-                errorEl.textContent = err.message || "Invalid credentials";
-                errorEl.classList.remove("hidden");
-            }
-            return;
-        }
-    }
 
-    if (data.role !== "ADMIN" && data.email !== "admin@athletelink.ai") {
+        if (data.role !== "ADMIN" && data.email !== "admin@athletelink.ai") {
+            throw new Error("Access denied: Your account does not have platform administrator privileges.");
+        }
+
+        localStorage.setItem("athletelink_token", data.token);
+        localStorage.setItem("athletelink_user", JSON.stringify({
+            id: data.userId,
+            fullName: data.fullName,
+            email: data.email,
+            role: data.role || "ADMIN"
+        }));
+
+        showAdminToast("Welcome back, Administrator!", "success");
+        closeAdminModal("modal-admin-login");
+        
+        const emailBadge = document.getElementById("admin-header-email");
+        if (emailBadge) emailBadge.textContent = data.email;
+
+        loadAdminStats();
+    } catch (err) {
         if (errorEl) {
-            errorEl.textContent = "Access denied: Your account does not have platform administrator privileges.";
+            errorEl.textContent = err.message;
             errorEl.classList.remove("hidden");
         }
-        return;
     }
-
-    localStorage.setItem("athletelink_token", data.token);
-    localStorage.setItem("athletelink_user", JSON.stringify({
-        id: data.userId,
-        fullName: data.fullName,
-        email: data.email,
-        role: data.role || "ADMIN"
-    }));
-
-    showAdminToast("Welcome back, Administrator!", "success");
-    closeAdminModal("modal-admin-login");
-    
-    const emailBadge = document.getElementById("admin-header-email");
-    if (emailBadge) emailBadge.textContent = data.email;
-
-    loadAdminStats();
 }
 
 function quickDemoLogin() {
@@ -123,7 +106,7 @@ function adminLogout() {
 }
 
 // -------------------------------------------------------------------------
-// LOW-LEVEL ADMIN API HELPER (WITH STATIC DEMO FALLBACK FOR GITHUB PAGES)
+// LOW-LEVEL ADMIN API HELPER
 // -------------------------------------------------------------------------
 async function adminFetch(endpoint, { method = "GET", body = null } = {}) {
     const token = localStorage.getItem("athletelink_token");
@@ -131,218 +114,22 @@ async function adminFetch(endpoint, { method = "GET", body = null } = {}) {
     if (token) headers["Authorization"] = "Bearer " + token;
 
     const base = window.APP_CONFIG?.API_BASE_URL || "/api";
-    try {
-        const res = await fetch(base + endpoint, {
-            method,
-            headers,
-            body: body ? JSON.stringify(body) : undefined
-        });
+    const res = await fetch(base + endpoint, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+    });
 
-        if (res.status === 401 || res.status === 403) {
-            openAdminModal("modal-admin-login");
-            throw new Error("Admin session expired. Please sign in.");
-        }
-
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-            throw new Error(data?.message || "Operation failed (" + res.status + ")");
-        }
-        return data;
-    } catch (networkErr) {
-        // Fallback demo mock data for GitHub Pages static deployment
-        return handleStaticDemoData(endpoint, method, body);
-    }
-}
-
-function handleStaticDemoData(endpoint, method, body) {
-    if (method !== "GET") {
-        return { message: "Operation saved in demo mode" };
+    if (res.status === 401 || res.status === 403) {
+        openAdminModal("modal-admin-login");
+        throw new Error("Admin session expired. Please sign in.");
     }
 
-    if (endpoint === "/admin/stats") {
-        return {
-            totalUsers: 24, totalAthletes: 18, totalCoaches: 5, totalScouts: 3,
-            totalOpportunities: 5, totalTrials: 8, totalScholarships: 5, totalApplications: 12,
-            sportsDistribution: [
-                { sport_name: "Athletics", athlete_count: 8 },
-                { sport_name: "Boxing", athlete_count: 5 },
-                { sport_name: "Hockey", athlete_count: 4 },
-                { sport_name: "Badminton", athlete_count: 3 },
-                { sport_name: "Archery", athlete_count: 2 },
-                { sport_name: "Wrestling", athlete_count: 2 }
-            ],
-            applicationStatus: [
-                { status: "SUBMITTED", count: 5 },
-                { status: "UNDER REVIEW", count: 3 },
-                { status: "SHORTLISTED", count: 2 },
-                { status: "APPROVED", count: 1 },
-                { status: "REJECTED", count: 1 }
-            ],
-            recentActivity: [
-                { activity_type: "USER_REGISTERED", full_name: "Rohan Sharma", sport: "Badminton", created_at: "2026-08-31 14:02:10" },
-                { activity_type: "TRIAL_APPLICATION", athlete_name: "Kavya Patel", target_name: "Khelo India National Talent Hunt", status: "UNDER REVIEW", created_at: "2026-08-31 11:30:00" },
-                { activity_type: "USER_REGISTERED", full_name: "Arjun Verma", sport: "Athletics", created_at: "2026-08-30 18:24:15" },
-                { activity_type: "TRIAL_APPLICATION", athlete_name: "Sree Vaibavi", target_name: "National Boxing Excellence Academy", status: "APPROVED", created_at: "2026-08-30 16:12:00" }
-            ]
-        };
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+        throw new Error(data?.message || "Operation failed (" + res.status + ")");
     }
-
-    if (endpoint === "/admin/users") {
-        return [
-            { id: 1, full_name: "Platform Administrator", email: "admin@athletelink.ai", sport: "Administration", location: "New Delhi, India", role: "ADMIN", status: "ACTIVE", created_at: "2026-08-30" },
-            { id: 2, full_name: "Sree Vaibavi", email: "sree@gmail.com", sport: "Boxing", location: "Chennai, Tamil Nadu", role: "ATHLETE", status: "ACTIVE", created_at: "2026-08-30" },
-            { id: 3, full_name: "Rohan Sharma", email: "rohan.test@athlete.in", sport: "Badminton", location: "Bengaluru, Karnataka", role: "ATHLETE", status: "ACTIVE", created_at: "2026-08-31" },
-            { id: 4, full_name: "Amit Kumar", email: "amit.kumar@sports.in", sport: "Athletics", location: "Patiala, Punjab", role: "ATHLETE", status: "ACTIVE", created_at: "2026-08-28" },
-            { id: 5, full_name: "Pooja Dahiya", email: "pooja.d@olympic.in", sport: "Wrestling", location: "Rohtak, Haryana", role: "ATHLETE", status: "ACTIVE", created_at: "2026-08-29" }
-        ];
-    }
-
-    if (endpoint === "/admin/athletes") {
-        return [
-            { id: 2, full_name: "Sree Vaibavi", email: "sree@gmail.com", sport: "Boxing", location: "Chennai, Tamil Nadu", status: "ACTIVE", achievements_count: 3, verified_achievements_count: 2, applications_count: 2, bookings_count: 1 },
-            { id: 3, full_name: "Rohan Sharma", email: "rohan.test@athlete.in", sport: "Badminton", location: "Bengaluru, Karnataka", status: "ACTIVE", achievements_count: 2, verified_achievements_count: 1, applications_count: 1, bookings_count: 1 },
-            { id: 4, full_name: "Amit Kumar", email: "amit.kumar@sports.in", sport: "Athletics", location: "Patiala, Punjab", status: "ACTIVE", achievements_count: 4, verified_achievements_count: 3, applications_count: 2, bookings_count: 1 },
-            { id: 5, full_name: "Pooja Dahiya", email: "pooja.d@olympic.in", sport: "Wrestling", location: "Rohtak, Haryana", status: "ACTIVE", achievements_count: 2, verified_achievements_count: 2, applications_count: 1, bookings_count: 0 }
-        ];
-    }
-
-    if (endpoint.startsWith("/admin/athletes/")) {
-        return {
-            profile: { id: 2, full_name: "Sree Vaibavi", email: "sree@gmail.com", sport: "Boxing", location: "Chennai, Tamil Nadu" },
-            achievements: [
-                { id: 1, title: "Tamil Nadu State Youth Boxing Championship", sport: "Boxing", level: "State", achievement_year: 2026, medal_award: "Gold Medal", verification_status: "VERIFIED", certificate_url: "https://example.com/cert.pdf" },
-                { id: 2, title: "South Zone Inter-University Boxing", sport: "Boxing", level: "Zonal", achievement_year: 2025, medal_award: "Silver Medal", verification_status: "VERIFIED" }
-            ],
-            trialApplications: [
-                { id: 1, trial_name: "National Boxing Excellence Academy", venue: "Army Sports Institute, Pune", trial_date: "2026-09-15", status: "SHORTLISTED" }
-            ]
-        };
-    }
-
-    if (endpoint === "/admin/coaches") {
-        return [
-            { id: 1, name: "Kavya Raman", organization: "Chennai High Performance Centre", sports: "Athletics, Track & Field", specialization: "Sprint technique & biomechanics", experience: "11 years", location: "Chennai, Tamil Nadu", latitude: 13.0827, longitude: 80.2707 },
-            { id: 2, name: "Gurpreet Singh", organization: "Punjab Sports Authority (NIS Patiala)", sports: "Boxing, Combat Sports", specialization: "Elite youth boxing conditioning", experience: "14 years", location: "Patiala, Punjab", latitude: 30.3398, longitude: 76.3869 },
-            { id: 3, name: "P. Gopichand Academy Staff", organization: "National Badminton Centre", sports: "Badminton", specialization: "Singles agility & match strategy", experience: "10 years", location: "Hyderabad, Telangana", latitude: 17.3850, longitude: 78.4867 },
-            { id: 4, name: "Rajeshwar Rao", organization: "Tata Archery Academy", sports: "Archery", specialization: "Recurve bow precision & mental training", experience: "16 years", location: "Jamshedpur, Jharkhand", latitude: 22.8046, longitude: 86.2029 },
-            { id: 5, name: "Sunil Kumar", organization: "Chhatrasal Stadium Wrestling Hub", sports: "Wrestling", specialization: "Freestyle technique & explosive strength", experience: "12 years", location: "New Delhi", latitude: 28.7041, longitude: 77.1025 }
-        ];
-    }
-
-    if (endpoint === "/admin/coaches/connections") {
-        return [
-            { id: 1, athlete_name: "Rohan Sharma", athlete_email: "rohan.test@athlete.in", coach_name: "P. Gopichand Academy Staff", message: "Looking for high-performance badminton agility assessment.", created_at: "2026-08-31", status: "CONNECTED" },
-            { id: 2, athlete_name: "Sree Vaibavi", athlete_email: "sree@gmail.com", coach_name: "Gurpreet Singh", message: "Requesting sparring guidance for national youth trials.", created_at: "2026-08-30", status: "CONNECTED" }
-        ];
-    }
-
-    if (endpoint === "/admin/scouts") {
-        return [
-            { id: 1, name: "Arjun Mehta", organization: "National Talent Discovery Network", sports: "Athletics, Track & Field", specialization: "Sprint & middle distance talent", experience: "12 years", location: "New Delhi" },
-            { id: 2, name: "Deepak Choudhary", organization: "Khelo India Talent Scout Wing", sports: "Boxing, Wrestling", specialization: "Rural & tribal youth identification", experience: "9 years", location: "Chandigarh" },
-            { id: 3, name: "Ananya Deshmukh", organization: "JSW Sports Foundation Scouting", sports: "Badminton, Archery", specialization: "Grassroots potential analytics", experience: "8 years", location: "Mumbai, Maharashtra" }
-        ];
-    }
-
-    if (endpoint === "/admin/scouts/connections") {
-        return [
-            { id: 1, athlete_name: "Amit Kumar", athlete_email: "amit.kumar@sports.in", scout_name: "Arjun Mehta", message: "Shared latest 100m sprint timing sheet (10.42s).", created_at: "2026-08-29", status: "CONNECTED" }
-        ];
-    }
-
-    if (endpoint === "/admin/opportunities") {
-        return [
-            { id: 1, name: "National Boxing Excellence Academy", slug: "boxing-academy", type: "Academy & Training", description: "Full scholarship residential training camp hosted at Army Sports Institute, Pune.", deadline: "2026-09-15", is_active: true, applications_count: 5 },
-            { id: 2, name: "JSW Sports Grassroots Stipend", slug: "jsw-stipend", type: "Scholarship Grant", description: "Monthly financial aid of ₹20,000 + elite dietary support for talented athletes.", deadline: "2026-09-01", is_active: true, applications_count: 8 },
-            { id: 3, name: "Khelo India National Talent Hunt", slug: "khelo-trials", type: "Open Trials", description: "Zonal open trials for athletics, weightlifting, and hockey across 50 regional sports complexes.", deadline: "2026-09-30", is_active: true, applications_count: 14 },
-            { id: 4, name: "Tata Archery Foundation Elite Program", slug: "tata-archery", type: "Academy & Training", description: "World-class archery coaching and Olympic equipment sponsorship.", deadline: "2026-10-15", is_active: true, applications_count: 3 },
-            { id: 5, name: "Reliance Foundation Youth Sports Grant", slug: "reliance-rf-grant", type: "Scholarship Grant", description: "Direct financial scholarship and athletic kit support for emerging track athletes.", deadline: "2026-10-30", is_active: true, applications_count: 6 }
-        ];
-    }
-
-    if (endpoint === "/admin/trials") {
-        return [
-            { id: 1, name: "National Athletics Zonal Trials 2026", sport: "Athletics", organization: "Athletics Federation of India", venue: "Jawaharlal Nehru Stadium, New Delhi", trial_date: "2026-09-20", category: "Open", age_category: "U21", registration_status: "REG OPEN", featured: true, total_capacity: 45, booked_count: 28, remaining_slots: 17 },
-            { id: 2, name: "Youth Boxing Championship Trials", sport: "Boxing", organization: "Boxing Federation of India", venue: "Army Sports Institute, Pune", trial_date: "2026-09-25", category: "Men's", age_category: "U19", registration_status: "REG OPEN", featured: true, total_capacity: 30, booked_count: 19, remaining_slots: 11 },
-            { id: 3, name: "U19 Men's Hockey National Trials", sport: "Hockey", organization: "Hockey India", venue: "Major Dhyan Chand Stadium, New Delhi", trial_date: "2026-10-05", category: "Men's", age_category: "U19", registration_status: "REG OPEN", featured: false, total_capacity: 50, booked_count: 32, remaining_slots: 18 },
-            { id: 4, name: "National Junior Badminton Trials", sport: "Badminton", organization: "Badminton Association of India", venue: "Gopichand Badminton Academy, Hyderabad", trial_date: "2026-10-12", category: "Open", age_category: "U18", registration_status: "REG OPEN", featured: true, total_capacity: 36, booked_count: 24, remaining_slots: 12 }
-        ];
-    }
-
-    if (endpoint === "/admin/scholarships") {
-        return [
-            { id: 1, title: "National Sports Talent Contest (NSTC) Scholarship", organization: "Sports Authority of India (SAI)", category: "General", eligibility: "Athletes aged 8-14 with district/state level podium positions in Olympic sports.", amount_details: "₹10,000/month + Full Kit & School Fee Waiver", deadline: "2026-10-15", is_active: true },
-            { id: 2, title: "Usha Rani Women in Athletics Endowment", organization: "National Women's Sports Federation", category: "Women", eligibility: "Female athletes competing at district or state level track & field, archery, or boxing.", amount_details: "₹25,000/month + Sports Nutrition & Travel Allowance", deadline: "2026-09-28", is_active: true },
-            { id: 3, title: "Veer Jawan Martyrs Children Sports Grant", organization: "Armed Forces Sports Control Board", category: "Children of armed-forces personnel", eligibility: "Children of Indian armed forces personnel and martyrs showing high potential in combat sports.", amount_details: "Full Boarding at Army Sports Institute + ₹15,000 Stipend", deadline: "2026-11-10", is_active: true },
-            { id: 4, title: "Ekalavya Single-Parent Talent Fellowship", organization: "Champions Trust India", category: "Single-parent families", eligibility: "Youth athletes from single-parent households with verified sports merit and income under ₹4 LPA.", amount_details: "₹18,000/month + Academic & Equipment Coverage", deadline: "2026-10-05", is_active: true },
-            { id: 5, title: "Para-Athlete Excellence Fellowship", organization: "Paralympic Committee of India", category: "Other", eligibility: "Differently-abled athletes preparing for national and international qualifying events.", amount_details: "₹30,000/month + Specialized Prosthetics & Coaching", deadline: "2026-11-20", is_active: true }
-        ];
-    }
-
-    if (endpoint === "/admin/applications") {
-        return {
-            trialApplications: [
-                { id: 1, athlete_name: "Sree Vaibavi", email: "sree@gmail.com", sport: "Boxing", position_role: "Flyweight (52kg)", trial_name: "Youth Boxing Championship Trials", introduction: "State Gold medalist with 4 years amateur record.", created_at: "2026-08-30", status: "APPROVED", application_type: "TRIAL" },
-                { id: 2, athlete_name: "Rohan Sharma", email: "rohan.test@athlete.in", sport: "Badminton", position_role: "Singles", trial_name: "National Junior Badminton Trials", introduction: "Karnataka State Junior runner-up.", created_at: "2026-08-31", status: "SHORTLISTED", application_type: "TRIAL" },
-                { id: 3, athlete_name: "Amit Kumar", email: "amit.kumar@sports.in", sport: "Athletics", position_role: "100m Sprinter", trial_name: "National Athletics Zonal Trials 2026", introduction: "Personal best 10.42s in state meet.", created_at: "2026-08-29", status: "UNDER REVIEW", application_type: "TRIAL" }
-            ],
-            opportunityApplications: [
-                { id: 1, athlete_name: "Sree Vaibavi", email: "sree@gmail.com", sport: "Boxing", opportunity_name: "National Boxing Excellence Academy", status: "SHORTLISTED", created_at: "2026-08-30", application_type: "OPPORTUNITY" },
-                { id: 2, athlete_name: "Pooja Dahiya", email: "pooja.d@olympic.in", sport: "Wrestling", opportunity_name: "JSW Sports Grassroots Stipend", status: "APPROVED", created_at: "2026-08-28", application_type: "OPPORTUNITY" }
-            ],
-            totalCount: 5
-        };
-    }
-
-    if (endpoint === "/admin/achievements") {
-        return [
-            { id: 1, athlete_name: "Sree Vaibavi", athlete_email: "sree@gmail.com", sport: "Boxing", level: "State", title: "Tamil Nadu State Youth Boxing Gold", achievement_type: "Championship", medal_award: "Gold Medal", institution: "Tamil Nadu Boxing Association", achievement_year: 2026, certificate_url: "https://example.com/cert.pdf", verification_status: "VERIFIED" },
-            { id: 2, athlete_name: "Rohan Sharma", athlete_email: "rohan.test@athlete.in", sport: "Badminton", level: "State", title: "State Junior Badminton Championship", achievement_type: "Tournament", medal_award: "Gold Medal", institution: "Karnataka Badminton Academy", achievement_year: 2026, certificate_url: "https://example.com/rohan-gold.pdf", verification_status: "VERIFIED" },
-            { id: 3, athlete_name: "Amit Kumar", athlete_email: "amit.kumar@sports.in", sport: "Athletics", level: "National", title: "National Youth Athletics Meet 100m", achievement_type: "Meet", medal_award: "Silver Medal", institution: "Athletics Federation of India", achievement_year: 2025, verification_status: "PENDING" }
-        ];
-    }
-
-    if (endpoint === "/admin/announcements") {
-        return [
-            { id: 1, title: "Registration Open for U19 National Trials 2026", category: "New Trial", priority: "URGENT", content: "Registrations are officially open for Hockey India and Athletics regional trials in New Delhi and Bhubaneswar.", created_at: "2026-08-30" },
-            { id: 2, title: "SAI & Reliance Grassroots Scholarship Applications Open", category: "New Scholarship", priority: "HIGH", content: "Over 200 athletic scholarships across 5 distinct categories including Women Athletes and Armed-Forces wards are now accepting applications.", created_at: "2026-08-30" },
-            { id: 3, title: "New Verified Coaches & Scouts Onboarded", category: "Important Announcement", priority: "NORMAL", content: "Certified high-performance coaches and talent scouts from SAI, NIS, and state academies have joined the AthleteLink network.", created_at: "2026-08-29" }
-        ];
-    }
-
-    if (endpoint === "/admin/system/status") {
-        return {
-            appName: "AthleteLink AI",
-            version: "1.0.0 (Hackathon Edition)",
-            serverStatus: "OPERATIONAL",
-            serverPort: 8880,
-            databaseType: "MySQL Server",
-            databaseStatus: "CONNECTED (Demo Online)",
-            dbPort: 3306,
-            jvmVersion: "Java 17 (Eclipse Temurin)",
-            totalMemoryMB: 512,
-            freeMemoryMB: 384,
-            maxMemoryMB: 2048,
-            tables: [
-                { table_name: "users", table_rows: 24 },
-                { table_name: "achievements", table_rows: 32 },
-                { table_name: "trials", table_rows: 8 },
-                { table_name: "trial_slots", table_rows: 24 },
-                { table_name: "trial_applications", table_rows: 15 },
-                { table_name: "scholarships", table_rows: 5 },
-                { table_name: "opportunities", table_rows: 5 },
-                { table_name: "applications", table_rows: 12 },
-                { table_name: "coaches", table_rows: 5 },
-                { table_name: "coach_connections", table_rows: 8 },
-                { table_name: "scouts", table_rows: 3 },
-                { table_name: "scout_connections", table_rows: 6 },
-                { table_name: "announcements", table_rows: 3 },
-                { table_name: "notifications", table_rows: 45 }
-            ]
-        };
-    }
-
-    return [];
+    return data;
 }
 
 // -------------------------------------------------------------------------
