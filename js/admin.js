@@ -58,13 +58,33 @@ async function handleAdminLogin(e) {
     if (errorEl) errorEl.classList.add("hidden");
 
     try {
-        const res = await fetch((window.APP_CONFIG?.API_BASE_URL || "/api") + "/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Invalid admin credentials");
+        let data = null;
+        let fetchFailed = false;
+        try {
+            const res = await fetch((window.APP_CONFIG?.API_BASE_URL || "/api") + "/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password })
+            });
+            if (res.ok) {
+                data = await res.json();
+            } else if (res.status === 404) {
+                fetchFailed = true;
+            } else {
+                const errData = await res.json().catch(() => null);
+                throw new Error(errData?.message || "Invalid admin credentials");
+            }
+        } catch (netErr) {
+            fetchFailed = true;
+        }
+
+        if (fetchFailed && window.AthleteLinkClientDB && typeof window.AthleteLinkClientDB.login === "function") {
+            data = window.AthleteLinkClientDB.login({ email, password });
+        }
+
+        if (!data) {
+            throw new Error("Invalid admin credentials");
+        }
 
         if (data.role !== "ADMIN" && data.email !== "admin@athletelink.ai") {
             throw new Error("Access denied: Your account does not have platform administrator privileges.");
@@ -114,11 +134,30 @@ async function adminFetch(endpoint, { method = "GET", body = null } = {}) {
     if (token) headers["Authorization"] = "Bearer " + token;
 
     const base = window.APP_CONFIG?.API_BASE_URL || "/api";
-    const res = await fetch(base + endpoint, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined
-    });
+    let res = null;
+    let networkFailed = false;
+
+    try {
+        res = await fetch(base + endpoint, {
+            method,
+            headers,
+            body: body ? JSON.stringify(body) : undefined
+        });
+    } catch (netErr) {
+        networkFailed = true;
+    }
+
+    if (networkFailed || (res && res.status === 404)) {
+        if (window.AthleteLinkClientDB && typeof window.AthleteLinkClientDB.handleAdminRequest === "function") {
+            const clientResult = window.AthleteLinkClientDB.handleAdminRequest(endpoint, { method, body });
+            if (clientResult !== null) {
+                return clientResult;
+            }
+        }
+        if (networkFailed) {
+            throw new Error("Can't reach the AthleteLink server. Make sure the backend is running.");
+        }
+    }
 
     if (res.status === 401 || res.status === 403) {
         openAdminModal("modal-admin-login");
