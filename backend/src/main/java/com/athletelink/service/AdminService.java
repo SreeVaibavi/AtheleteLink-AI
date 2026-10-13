@@ -14,10 +14,12 @@ public class AdminService {
 
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
 
-    public AdminService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder) {
+    public AdminService(JdbcTemplate jdbc, PasswordEncoder passwordEncoder, EmailService emailService) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
     }
 
     @PostConstruct
@@ -27,6 +29,8 @@ public class AdminService {
         addColumnIfMissing("users", "status", "VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'");
         addColumnIfMissing("achievements", "verification_status", "VARCHAR(30) NOT NULL DEFAULT 'PENDING'");
         addColumnIfMissing("achievements", "admin_notes", "VARCHAR(255) NULL");
+        addColumnIfMissing("trial_applications", "confirmed_trial_date", "DATE NULL");
+        addColumnIfMissing("trial_applications", "confirmed_trial_time", "VARCHAR(30) NULL");
 
         // Opportunities table for dynamic management
         jdbc.execute("CREATE TABLE IF NOT EXISTS opportunities (" +
@@ -51,6 +55,48 @@ public class AdminService {
                 "deadline DATE NULL, " +
                 "is_active BOOLEAN NOT NULL DEFAULT TRUE, " +
                 "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Scholarship Applications table
+        jdbc.execute("CREATE TABLE IF NOT EXISTS scholarship_applications (" +
+                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
+                "user_id BIGINT NOT NULL, " +
+                "category VARCHAR(60) NOT NULL, " +
+                "category_title VARCHAR(180) NOT NULL, " +
+                "full_name VARCHAR(120) NOT NULL, " +
+                "email VARCHAR(180) NOT NULL, " +
+                "phone VARCHAR(40) NOT NULL, " +
+                "age INT NULL, " +
+                "dob DATE NULL, " +
+                "family_income DECIMAL(12,2) NULL, " +
+                "parent_guardian_name VARCHAR(120) NULL, " +
+                "defence_relationship VARCHAR(60) NULL, " +
+                "supporting_person_name VARCHAR(120) NULL, " +
+                "current_grade VARCHAR(80) NULL, " +
+                "maintained_grade VARCHAR(80) NULL, " +
+                "stationery_required VARCHAR(10) NULL, " +
+                "resources_required VARCHAR(10) NULL, " +
+                "required_resources_list TEXT NULL, " +
+                "loss_year INT NULL, " +
+                "documents_json LONGTEXT NULL, " +
+                "status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED', " +
+                "admin_notes VARCHAR(500) NULL, " +
+                "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, " +
+                "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, " +
+                "CONSTRAINT fk_scholarship_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        jdbc.execute("CREATE TABLE IF NOT EXISTS scholarship_quota_log (" +
+                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
+                "user_id BIGINT NOT NULL, " +
+                "email VARCHAR(180) NOT NULL, " +
+                "phone VARCHAR(40) NULL, " +
+                "application_id BIGINT NOT NULL, " +
+                "category VARCHAR(60) NOT NULL, " +
+                "status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED', " +
+                "applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, " +
+                "UNIQUE KEY uq_quota_user (user_id), " +
+                "CONSTRAINT fk_quota_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // Announcements table
@@ -86,12 +132,9 @@ public class AdminService {
                 jdbc.update("INSERT INTO users (full_name, email, password_hash, sport, location, role, status, created_at) " +
                         "VALUES ('Platform Administrator', 'admin@athletelink.ai', ?, 'Administration', 'New Delhi, India', 'ADMIN', 'ACTIVE', NOW())", passHash);
             } else {
-                // Ensure role is ADMIN and status is ACTIVE
                 jdbc.update("UPDATE users SET role='ADMIN', status='ACTIVE' WHERE email='admin@athletelink.ai'");
             }
-        } catch (Exception e) {
-            // ignore
-        }
+        } catch (Exception ignored) {}
     }
 
     private void seedOpportunities() {
@@ -118,25 +161,25 @@ public class AdminService {
     }
 
     private void seedScholarships() {
-        seedScholarshipIfNotExists("National Sports Talent Contest (NSTC) Scholarship", "Sports Authority of India (SAI)",
-                "General", "Athletes aged 8-14 who have won district/state level competitions in designated olympic disciplines.",
-                "₹10,000/month + Full Kit & School Fee Waiver", "2026-10-15");
+        seedScholarshipIfNotExists("Scholarship for Under 18", "Youth Sports Authority of India",
+                "Under 18", "Athletes below 18 years with active sports participation and annual family income under ₹5 LPA.",
+                "₹15,000/month + Full Kit & School Fee Waiver", "2026-10-15");
 
-        seedScholarshipIfNotExists("Usha Rani Women in Athletics Endowment", "National Women's Sports Federation",
-                "Women", "Female athletes competing at district or state level track & field, archery, or boxing.",
-                "₹25,000/month + Sports Nutrition & Travel Allowance", "2026-09-28");
+        seedScholarshipIfNotExists("Scholarship for Above 18", "National Sports Development Fund",
+                "Above 18", "Athletes aged 18 and above pursuing competitive sports and requiring financial development aid.",
+                "₹25,000/month + Sports Nutrition & Training Allowance", "2026-10-30");
 
-        seedScholarshipIfNotExists("Veer Jawan Martyrs Children Sports Grant", "Armed Forces Sports Control Board",
-                "Children of armed-forces personnel", "Children of Indian armed forces personnel and martyrs showing high potential in combat or endurance sports.",
-                "Full Boarding at Army Sports Institute + ₹15,000 Stipend", "2026-11-10");
+        seedScholarshipIfNotExists("Scholarship for Women", "National Women's Sports Federation",
+                "Women", "Dedicated financial assistance for women athletes across all sporting disciplines.",
+                "₹25,000/month + Equipment & Travel Grant", "2026-09-28");
 
-        seedScholarshipIfNotExists("Ekalavya Single-Parent Talent Fellowship", "Champions Trust India",
-                "Single-parent families", "Youth athletes from single-parent households with verified sports merit and income under ₹4 LPA.",
+        seedScholarshipIfNotExists("Scholarships for Children of Defence Personnel", "Armed Forces Sports Control Board",
+                "Defence Personnel", "Children of serving, retired, or martyr personnel from Army, Navy, or Air Force.",
+                "Full Boarding at Army Sports Institute + ₹20,000 Monthly Stipend", "2026-11-10");
+
+        seedScholarshipIfNotExists("Scholarship for Single Parents", "Champions Trust India",
+                "Single Parents", "Athletes from single-parent households with verified sporting potential and family income aid.",
                 "₹18,000/month + Academic & Equipment Coverage", "2026-10-05");
-
-        seedScholarshipIfNotExists("Para-Athlete Excellence Fellowship", "Paralympic Committee of India",
-                "Other", "Differently-abled athletes preparing for national and international qualifying events.",
-                "₹30,000/month + Specialized Prosthetics & Coaching", "2026-11-20");
     }
 
     private void seedScholarshipIfNotExists(String title, String org, String category, String eligibility, String amount, String deadline) {
@@ -155,7 +198,7 @@ public class AdminService {
                 "New Trial", "URGENT");
 
         seedAnnouncementIfNotExists("SAI & Reliance Grassroots Scholarship Applications Open",
-                "Over 200 athletic scholarships across 5 distinct categories including Women Athletes and Armed-Forces wards are now accepting applications. Check the Scholarships section for eligibility.",
+                "5 distinct scholarship programs are accepting applications: Under 18, Above 18, Women in Sports, Children of Defence Personnel, and Single Parents. Note: Strict 1 scholarship per athlete policy.",
                 "New Scholarship", "HIGH");
 
         seedAnnouncementIfNotExists("New Verified Coaches & Scouts Onboarded from South & North Zones",
@@ -188,7 +231,9 @@ public class AdminService {
         int totalScholarships = queryCount("SELECT COUNT(*) FROM scholarships");
         int trialApplicationsCount = queryCount("SELECT COUNT(*) FROM trial_applications");
         int oppApplicationsCount = queryCount("SELECT COUNT(*) FROM applications");
-        int totalApplications = trialApplicationsCount + oppApplicationsCount;
+        int scholarshipApplicationsCount = queryCount("SELECT COUNT(*) FROM scholarship_applications");
+        int approvedScholarshipsCount = queryCount("SELECT COUNT(*) FROM scholarship_applications WHERE status='APPROVED'");
+        int totalApplications = trialApplicationsCount + oppApplicationsCount + scholarshipApplicationsCount;
         int totalAchievements = queryCount("SELECT COUNT(*) FROM achievements");
         int pendingAchievements = queryCount("SELECT COUNT(*) FROM achievements WHERE verification_status='PENDING' OR verification_status IS NULL");
         int totalBookings = queryCount("SELECT COUNT(*) FROM bookings");
@@ -203,6 +248,8 @@ public class AdminService {
         stats.put("totalApplications", totalApplications);
         stats.put("trialApplicationsCount", trialApplicationsCount);
         stats.put("opportunityApplicationsCount", oppApplicationsCount);
+        stats.put("scholarshipApplicationsCount", scholarshipApplicationsCount);
+        stats.put("approvedScholarshipsCount", approvedScholarshipsCount);
         stats.put("totalAchievements", totalAchievements);
         stats.put("pendingAchievements", pendingAchievements);
         stats.put("totalBookings", totalBookings);
@@ -219,7 +266,9 @@ public class AdminService {
                 "SELECT status, COUNT(*) as count FROM (" +
                         "  SELECT status FROM trial_applications " +
                         "  UNION ALL " +
-                        "  SELECT status FROM applications" +
+                        "  SELECT status FROM applications " +
+                        "  UNION ALL " +
+                        "  SELECT status FROM scholarship_applications" +
                         ") combined GROUP BY status");
         stats.put("applicationStatus", applicationStatus);
 
@@ -235,6 +284,11 @@ public class AdminService {
                     "SELECT a.id, a.athlete_name, a.sport, a.status, a.created_at, t.name as target_name, 'TRIAL_APPLICATION' as activity_type " +
                             "FROM trial_applications a JOIN trials t ON t.id=a.trial_id ORDER BY a.created_at DESC LIMIT 5");
             recentActivity.addAll(recentApps);
+
+            List<Map<String, Object>> recentSchol = jdbc.queryForList(
+                    "SELECT id, full_name as athlete_name, category_title as target_name, status, created_at, 'SCHOLARSHIP_APPLICATION' as activity_type " +
+                            "FROM scholarship_applications ORDER BY created_at DESC LIMIT 5");
+            recentActivity.addAll(recentSchol);
         } catch (Exception ignored) {}
 
         recentActivity.sort((a, b) -> {
@@ -268,7 +322,8 @@ public class AdminService {
         return jdbc.queryForList(
                 "SELECT id, full_name, email, sport, location, role, status, created_at, " +
                         "(SELECT COUNT(*) FROM achievements a WHERE a.user_id = u.id) as achievements_count, " +
-                        "(SELECT COUNT(*) FROM trial_applications ta WHERE ta.user_id = u.id) as trial_apps_count " +
+                        "(SELECT COUNT(*) FROM trial_applications ta WHERE ta.user_id = u.id) as trial_apps_count, " +
+                        "(SELECT COUNT(*) FROM scholarship_applications sa WHERE sa.user_id = u.id) as scholarship_apps_count " +
                         "FROM users u ORDER BY id DESC");
     }
 
@@ -340,6 +395,7 @@ public class AdminService {
                         "(SELECT COUNT(*) FROM achievements a WHERE a.user_id = u.id) as achievements_count, " +
                         "(SELECT COUNT(*) FROM achievements a WHERE a.user_id = u.id AND a.verification_status='VERIFIED') as verified_achievements_count, " +
                         "(SELECT COUNT(*) FROM trial_applications ta WHERE ta.user_id = u.id) as applications_count, " +
+                        "(SELECT COUNT(*) FROM scholarship_applications sa WHERE sa.user_id = u.id) as scholarship_count, " +
                         "(SELECT COUNT(*) FROM bookings b WHERE b.user_id = u.id) as bookings_count " +
                         "FROM users u WHERE u.role='ATHLETE' OR u.role IS NULL OR u.role='' ORDER BY u.id DESC");
     }
@@ -351,6 +407,8 @@ public class AdminService {
         List<Map<String, Object>> trialApplications = jdbc.queryForList(
                 "SELECT a.*, t.name as trial_name, t.venue, t.trial_date FROM trial_applications a " +
                         "JOIN trials t ON t.id=a.trial_id WHERE a.user_id=? ORDER BY a.created_at DESC", id);
+        List<Map<String, Object>> scholarshipApplications = jdbc.queryForList(
+                "SELECT * FROM scholarship_applications WHERE user_id=? ORDER BY created_at DESC", id);
         List<Map<String, Object>> oppApplications = jdbc.queryForList(
                 "SELECT * FROM applications WHERE user_id=? ORDER BY created_at DESC", id);
         List<Map<String, Object>> bookings = jdbc.queryForList(
@@ -367,6 +425,7 @@ public class AdminService {
         details.put("profile", profile);
         details.put("achievements", achievements);
         details.put("trialApplications", trialApplications);
+        details.put("scholarshipApplications", scholarshipApplications);
         details.put("opportunityApplications", oppApplications);
         details.put("bookings", bookings);
         details.put("coachConnections", coachConnections);
@@ -539,7 +598,7 @@ public class AdminService {
     }
 
     // =========================================================================
-    // TRIAL MANAGEMENT
+    // TRIAL MANAGEMENT & ADMIN BOOKING
     // =========================================================================
     public List<Map<String, Object>> getTrials() {
         return jdbc.queryForList(
@@ -570,7 +629,6 @@ public class AdminService {
 
         Long trialId = jdbc.queryForObject("SELECT id FROM trials WHERE name=?", Long.class, name);
 
-        // Auto-generate default slots if trialDate is present
         int initialCapacity = req.get("capacity") != null ? Integer.parseInt(req.get("capacity").toString()) : 30;
         if (trialId != null && trialDate != null) {
             int slotCap = Math.max(5, initialCapacity / 3);
@@ -629,7 +687,7 @@ public class AdminService {
     }
 
     // =========================================================================
-    // SCHOLARSHIP MANAGEMENT
+    // SCHOLARSHIP DEFINITION CRUD
     // =========================================================================
     public List<Map<String, Object>> getScholarships() {
         return jdbc.queryForList("SELECT * FROM scholarships ORDER BY id ASC");
@@ -674,13 +732,121 @@ public class AdminService {
     }
 
     // =========================================================================
-    // APPLICATIONS MANAGEMENT
+    // SCHOLARSHIP APPLICATIONS ADMIN APPROVAL WORKFLOW
+    // =========================================================================
+    public List<Map<String, Object>> getScholarshipApplications() {
+        return jdbc.queryForList(
+                "SELECT sa.*, u.full_name as user_full_name, u.email as user_email, u.sport as user_sport " +
+                        "FROM scholarship_applications sa " +
+                        "JOIN users u ON u.id = sa.user_id " +
+                        "ORDER BY sa.created_at DESC, sa.id DESC");
+    }
+
+    @Transactional
+    public Map<String, Object> approveScholarshipApplication(Long id, String adminNotes) {
+        List<Map<String, Object>> apps = jdbc.queryForList("SELECT * FROM scholarship_applications WHERE id=?", id);
+        if (apps.isEmpty()) throw new IllegalArgumentException("Scholarship application not found.");
+        Map<String, Object> app = apps.get(0);
+
+        String notes = (adminNotes != null && !adminNotes.isBlank()) ? adminNotes : "Approved by platform administrator";
+        jdbc.update("UPDATE scholarship_applications SET status='APPROVED', admin_notes=? WHERE id=?", notes, id);
+        jdbc.update("UPDATE scholarship_quota_log SET status='APPROVED' WHERE application_id=?", id);
+
+        String email = Objects.toString(app.get("email"), "");
+        String name = Objects.toString(app.get("full_name"), "Athlete");
+        String categoryTitle = Objects.toString(app.get("category_title"), "Scholarship");
+        Long userId = ((Number) app.get("user_id")).longValue();
+
+        // Send Approval Email
+        boolean sent = emailService.sendScholarshipApprovalEmail(email, name, categoryTitle);
+
+        // Add Notification
+        jdbc.update("INSERT INTO notifications(user_id, title, message) VALUES(?, ?, ?)",
+                userId, "Scholarship Application Approved! 🎉",
+                "Congratulations! Your scholarship application for " + categoryTitle + " has been Approved.");
+
+        Map<String, Object> res = new LinkedHashMap<>(app);
+        res.put("status", "APPROVED");
+        res.put("adminNotes", notes);
+        res.put("emailSent", sent);
+        return res;
+    }
+
+    @Transactional
+    public Map<String, Object> rejectScholarshipApplication(Long id, String adminNotes) {
+        List<Map<String, Object>> apps = jdbc.queryForList("SELECT * FROM scholarship_applications WHERE id=?", id);
+        if (apps.isEmpty()) throw new IllegalArgumentException("Scholarship application not found.");
+        Map<String, Object> app = apps.get(0);
+
+        String notes = (adminNotes != null && !adminNotes.isBlank()) ? adminNotes : "Application did not meet criteria";
+        jdbc.update("UPDATE scholarship_applications SET status='REJECTED', admin_notes=? WHERE id=?", notes, id);
+        jdbc.update("UPDATE scholarship_quota_log SET status='REJECTED' WHERE application_id=?", id);
+
+        Long userId = ((Number) app.get("user_id")).longValue();
+        String categoryTitle = Objects.toString(app.get("category_title"), "Scholarship");
+
+        jdbc.update("INSERT INTO notifications(user_id, title, message) VALUES(?, ?, ?)",
+                userId, "Scholarship Application Status",
+                "Your scholarship application for " + categoryTitle + " was reviewed and marked as Rejected (" + notes + ").");
+
+        Map<String, Object> res = new LinkedHashMap<>(app);
+        res.put("status", "REJECTED");
+        res.put("adminNotes", notes);
+        return res;
+    }
+
+    // =========================================================================
+    // TRIAL APPLICATIONS & ADMIN CONFIRMATION / BOOKING
+    // =========================================================================
+    @Transactional
+    public Map<String, Object> confirmTrialBookingByAdmin(Long trialAppId, String confirmedDate, String confirmedTime) {
+        if (confirmedDate == null || confirmedDate.isBlank()) {
+            throw new IllegalArgumentException("Confirmed trial date is required.");
+        }
+        if (confirmedTime == null || confirmedTime.isBlank()) {
+            throw new IllegalArgumentException("Confirmed trial time is required.");
+        }
+
+        List<Map<String, Object>> apps = jdbc.queryForList(
+                "SELECT a.*, t.name as trial_name, t.venue, t.sport FROM trial_applications a " +
+                        "JOIN trials t ON t.id = a.trial_id WHERE a.id=?", trialAppId);
+        if (apps.isEmpty()) throw new IllegalArgumentException("Trial application not found.");
+        Map<String, Object> app = apps.get(0);
+
+        LocalDate date = parseDate(confirmedDate);
+        jdbc.update("UPDATE trial_applications SET status='CONFIRMED', confirmed_trial_date=?, confirmed_trial_time=? WHERE id=?",
+                date, confirmedTime, trialAppId);
+
+        String email = Objects.toString(app.get("email"), "");
+        String name = Objects.toString(app.get("athlete_name"), "Athlete");
+        String trialName = Objects.toString(app.get("trial_name"), "Trial");
+        String venue = Objects.toString(app.get("venue"), "Trial Venue");
+        Long userId = ((Number) app.get("user_id")).longValue();
+
+        // Dispatch Trial Confirmation Email
+        boolean sent = emailService.sendTrialAdminBookingEmail(email, name, trialName, venue, confirmedDate, confirmedTime);
+
+        // Add Notification
+        jdbc.update("INSERT INTO notifications(user_id, title, message) VALUES(?, ?, ?)",
+                userId, "Trial Booking Confirmed! 🏅",
+                "Your trial for " + trialName + " has been booked for " + confirmedDate + " at " + confirmedTime + ".");
+
+        Map<String, Object> res = new LinkedHashMap<>(app);
+        res.put("status", "CONFIRMED");
+        res.put("confirmedTrialDate", confirmedDate);
+        res.put("confirmedTrialTime", confirmedTime);
+        res.put("emailSent", sent);
+        return res;
+    }
+
+    // =========================================================================
+    // GENERAL APPLICATIONS MANAGEMENT
     // =========================================================================
     public Map<String, Object> getAllApplications() {
         List<Map<String, Object>> trialApplications = jdbc.queryForList(
                 "SELECT a.id, a.user_id, a.trial_id, a.athlete_name, a.email, a.phone, a.location, a.sport, a.position_role, " +
                         "a.age, a.institution, a.experience, a.achievements, a.introduction, a.skills, a.additional_info, a.status, " +
-                        "a.created_at, a.updated_at, t.name as trial_name, t.organization as trial_org, t.venue, t.trial_date, " +
+                        "a.confirmed_trial_date, a.confirmed_trial_time, a.created_at, a.updated_at, t.name as trial_name, t.organization as trial_org, t.venue, t.trial_date, " +
                         "'TRIAL' as application_type " +
                         "FROM trial_applications a " +
                         "JOIN trials t ON t.id = a.trial_id " +
@@ -694,10 +860,13 @@ public class AdminService {
                         "JOIN users u ON u.id = a.user_id " +
                         "ORDER BY a.created_at DESC");
 
+        List<Map<String, Object>> scholarshipApps = getScholarshipApplications();
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("trialApplications", trialApplications);
         result.put("opportunityApplications", oppApplications);
-        result.put("totalCount", trialApplications.size() + oppApplications.size());
+        result.put("scholarshipApplications", scholarshipApps);
+        result.put("totalCount", trialApplications.size() + oppApplications.size() + scholarshipApps.size());
         return result;
     }
 

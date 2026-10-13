@@ -44,8 +44,7 @@ async function apiRequest(path, { method = "GET", body = null, auth = false } = 
         if (token) headers["Authorization"] = "Bearer " + token;
     }
 
-    let response = null;
-    let networkFailed = false;
+    let response;
     try {
         response = await fetch(window.APP_CONFIG.API_BASE_URL + path, {
             method,
@@ -53,22 +52,11 @@ async function apiRequest(path, { method = "GET", body = null, auth = false } = 
             body: body ? JSON.stringify(body) : undefined,
         });
     } catch (networkErr) {
-        networkFailed = true;
-    }
-
-    if (networkFailed || (response && response.status === 404)) {
-        if (window.AthleteLinkClientDB && typeof window.AthleteLinkClientDB.handleRequest === "function") {
-            const clientResult = window.AthleteLinkClientDB.handleRequest(path, { method, body, auth });
-            if (clientResult !== null) {
-                return clientResult;
-            }
-        }
-        if (networkFailed) {
-            throw new Error(
-                "Can't reach the AthleteLink server. Make sure the backend is running on " +
-                    window.APP_CONFIG.API_BASE_URL
-            );
-        }
+        // Backend unreachable / CORS / offline
+        throw new Error(
+            "Can't reach the AthleteLink server. Make sure the backend is running on " +
+                window.APP_CONFIG.API_BASE_URL
+        );
     }
 
     let data = null;
@@ -203,7 +191,7 @@ async function handleLogin(event) {
         setTimeout(() => {
             closeAuth();
             if (role === "ADMIN") {
-                window.location.href = "admin.html";
+                window.location.href = "/admin.html";
             } else {
                 switchTab("dashboard");
             }

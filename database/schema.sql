@@ -183,17 +183,45 @@ CREATE TABLE IF NOT EXISTS trial_application_confirmations (
     id BIGINT AUTO_INCREMENT PRIMARY KEY, application_id BIGINT NOT NULL UNIQUE, user_id BIGINT NOT NULL, email VARCHAR(180) NOT NULL, confirmation_token VARCHAR(120) NOT NULL UNIQUE, email_sent BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, confirmed_at DATETIME NULL, CONSTRAINT fk_trial_app_confirmation FOREIGN KEY(application_id) REFERENCES trial_applications(id) ON DELETE CASCADE, CONSTRAINT fk_trial_app_confirmation_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS booking_confirmations (
+CREATE TABLE IF NOT EXISTS scholarship_applications (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    booking_id BIGINT NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL,
+    category VARCHAR(60) NOT NULL,
+    category_title VARCHAR(180) NOT NULL,
+    full_name VARCHAR(120) NOT NULL,
+    email VARCHAR(180) NOT NULL,
+    phone VARCHAR(40) NOT NULL,
+    age INT NULL,
+    dob DATE NULL,
+    family_income DECIMAL(12,2) NULL,
+    parent_guardian_name VARCHAR(120) NULL,
+    defence_relationship VARCHAR(60) NULL,
+    supporting_person_name VARCHAR(120) NULL,
+    current_grade VARCHAR(80) NULL,
+    maintained_grade VARCHAR(80) NULL,
+    stationery_required VARCHAR(10) NULL,
+    resources_required VARCHAR(10) NULL,
+    required_resources_list TEXT NULL,
+    loss_year INT NULL,
+    documents_json LONGTEXT NULL,
+    status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED',
+    admin_notes VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_scholarship_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS scholarship_quota_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     email VARCHAR(180) NOT NULL,
-    confirmation_token VARCHAR(120) NOT NULL UNIQUE,
-    email_sent BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    confirmed_at DATETIME NULL,
-    CONSTRAINT fk_confirmation_booking FOREIGN KEY(booking_id) REFERENCES bookings(id) ON DELETE CASCADE,
-    CONSTRAINT fk_confirmation_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    phone VARCHAR(40) NULL,
+    application_id BIGINT NOT NULL,
+    category VARCHAR(60) NOT NULL,
+    status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED',
+    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_quota_user (user_id),
+    CONSTRAINT fk_quota_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO trials(name,sport,organization,venue,trial_date,category,age_category,registration_status,featured) VALUES

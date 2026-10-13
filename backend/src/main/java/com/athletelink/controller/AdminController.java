@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -314,12 +315,40 @@ public class AdminController {
     }
 
     // =========================================================================
-    // APPLICATIONS
+    // APPLICATIONS & SCHOLARSHIP APPROVALS
     // =========================================================================
     @GetMapping("/applications")
     public ResponseEntity<?> getApplications(Authentication auth) {
         checkAdmin(auth);
         return ResponseEntity.ok(adminService.getAllApplications());
+    }
+
+    @GetMapping("/scholarship-applications")
+    public ResponseEntity<?> getScholarshipApplications(Authentication auth) {
+        checkAdmin(auth);
+        return ResponseEntity.ok(adminService.getScholarshipApplications());
+    }
+
+    @RequestMapping(value = "/scholarship-applications/{id}/approve", method = {RequestMethod.POST, RequestMethod.PATCH})
+    public ResponseEntity<?> approveScholarshipApplication(Authentication auth, @PathVariable Long id, @RequestBody(required=false) Map<String, Object> req) {
+        checkAdmin(auth);
+        String notes = req != null ? (String) req.get("adminNotes") : null;
+        return ResponseEntity.ok(adminService.approveScholarshipApplication(id, notes));
+    }
+
+    @RequestMapping(value = "/scholarship-applications/{id}/reject", method = {RequestMethod.POST, RequestMethod.PATCH})
+    public ResponseEntity<?> rejectScholarshipApplication(Authentication auth, @PathVariable Long id, @RequestBody(required=false) Map<String, Object> req) {
+        checkAdmin(auth);
+        String notes = req != null ? (String) req.get("adminNotes") : null;
+        return ResponseEntity.ok(adminService.rejectScholarshipApplication(id, notes));
+    }
+
+    @RequestMapping(value = "/trial-applications/{id}/confirm-booking", method = {RequestMethod.POST, RequestMethod.PATCH})
+    public ResponseEntity<?> confirmTrialBooking(Authentication auth, @PathVariable Long id, @RequestBody Map<String, Object> req) {
+        checkAdmin(auth);
+        String date = Objects.toString(req.get("confirmedDate"), "");
+        String time = Objects.toString(req.get("confirmedTime"), "");
+        return ResponseEntity.ok(adminService.confirmTrialBookingByAdmin(id, date, time));
     }
 
     @PatchMapping("/applications/trials/{id}/status")

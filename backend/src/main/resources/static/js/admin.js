@@ -10,6 +10,7 @@ let appsChartInstance = null;
 let allUsersData = [];
 let allAthletesData = [];
 let allApplicationsData = { trialApplications: [], opportunityApplications: [] };
+let allScholarshipAppsData = [];
 let allAchievementsData = [];
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -58,33 +59,13 @@ async function handleAdminLogin(e) {
     if (errorEl) errorEl.classList.add("hidden");
 
     try {
-        let data = null;
-        let fetchFailed = false;
-        try {
-            const res = await fetch((window.APP_CONFIG?.API_BASE_URL || "/api") + "/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password })
-            });
-            if (res.ok) {
-                data = await res.json();
-            } else if (res.status === 404) {
-                fetchFailed = true;
-            } else {
-                const errData = await res.json().catch(() => null);
-                throw new Error(errData?.message || "Invalid admin credentials");
-            }
-        } catch (netErr) {
-            fetchFailed = true;
-        }
-
-        if (fetchFailed && window.AthleteLinkClientDB && typeof window.AthleteLinkClientDB.login === "function") {
-            data = window.AthleteLinkClientDB.login({ email, password });
-        }
-
-        if (!data) {
-            throw new Error("Invalid admin credentials");
-        }
+        const res = await fetch((window.APP_CONFIG?.API_BASE_URL || "/api") + "/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Invalid admin credentials");
 
         if (data.role !== "ADMIN" && data.email !== "admin@athletelink.ai") {
             throw new Error("Access denied: Your account does not have platform administrator privileges.");
@@ -122,7 +103,7 @@ function quickDemoLogin() {
 function adminLogout() {
     localStorage.removeItem("athletelink_token");
     localStorage.removeItem("athletelink_user");
-    window.location.href = "index.html";
+    window.location.href = "/";
 }
 
 // -------------------------------------------------------------------------
@@ -134,30 +115,11 @@ async function adminFetch(endpoint, { method = "GET", body = null } = {}) {
     if (token) headers["Authorization"] = "Bearer " + token;
 
     const base = window.APP_CONFIG?.API_BASE_URL || "/api";
-    let res = null;
-    let networkFailed = false;
-
-    try {
-        res = await fetch(base + endpoint, {
-            method,
-            headers,
-            body: body ? JSON.stringify(body) : undefined
-        });
-    } catch (netErr) {
-        networkFailed = true;
-    }
-
-    if (networkFailed || (res && res.status === 404)) {
-        if (window.AthleteLinkClientDB && typeof window.AthleteLinkClientDB.handleAdminRequest === "function") {
-            const clientResult = window.AthleteLinkClientDB.handleAdminRequest(endpoint, { method, body });
-            if (clientResult !== null) {
-                return clientResult;
-            }
-        }
-        if (networkFailed) {
-            throw new Error("Can't reach the AthleteLink server. Make sure the backend is running.");
-        }
-    }
+    const res = await fetch(base + endpoint, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+    });
 
     if (res.status === 401 || res.status === 403) {
         openAdminModal("modal-admin-login");
@@ -203,7 +165,7 @@ function switchAdminTab(tabId) {
         case "scouts": loadScouts(); break;
         case "opportunities": loadOpportunities(); break;
         case "trials": loadTrials(); break;
-        case "scholarships": loadScholarships(); break;
+        case "scholarships": loadScholarships(); loadScholarshipApplications(); break;
         case "applications": loadApplications(); break;
         case "achievements": loadAchievements(); break;
         case "announcements": loadAnnouncements(); break;
@@ -348,7 +310,7 @@ function renderActivityFeed(items) {
 // -------------------------------------------------------------------------
 async function loadUsers() {
     const tbody = document.getElementById("users-table-body");
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-gray-500">Loading users…</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-gray-500">Loading users from MySQL…</td></tr>';
     try {
         allUsersData = await adminFetch("/admin/users");
         filterUsersTable();
@@ -481,10 +443,10 @@ async function toggleUserStatus(id, newStatus) {
 }
 
 async function deleteUser(id) {
-    if (!confirm("Are you sure you want to delete this user?")) return;
+    if (!confirm("Are you sure you want to delete this user? All related submissions and records will be removed.")) return;
     try {
         await adminFetch(`/admin/users/${id}`, { method: "DELETE" });
-        showAdminToast("User deleted", "success");
+        showAdminToast("User deleted from platform", "success");
         loadUsers();
         loadAdminStats();
     } catch (err) {
@@ -670,6 +632,7 @@ async function loadCoaches() {
     }
 }
 
+let allCoachesData = [];
 function openAddCoachModal() {
     document.getElementById("modal-coach-title").textContent = "Add Coach";
     document.getElementById("coach-form-id").value = "";
@@ -1224,7 +1187,204 @@ async function deleteScholarship(id) {
 }
 
 // -------------------------------------------------------------------------
-// 9. APPLICATIONS MANAGEMENT
+// 8.1 SCHOLARSHIP APPLICATIONS (5 CATEGORIES) REVIEW & APPROVAL
+// -------------------------------------------------------------------------
+async function loadScholarshipApplications() {
+    try {
+        allScholarshipAppsData = await adminFetch("/admin/scholarship-applications");
+        filterScholarshipAppsTable();
+    } catch (err) {
+        showAdminToast(err.message, "error");
+    }
+}
+
+function filterScholarshipAppsTable() {
+    const catFilter = document.getElementById("scholarship-apps-filter-cat")?.value || "ALL";
+    const statusFilter = document.getElementById("scholarship-apps-filter-status")?.value || "ALL";
+
+    let filtered = allScholarshipAppsData || [];
+    if (catFilter !== "ALL") {
+        filtered = filtered.filter(a => a.category === catFilter);
+    }
+    if (statusFilter !== "ALL") {
+        filtered = filtered.filter(a => (a.status || "SUBMITTED").toUpperCase() === statusFilter);
+    }
+
+    const tbody = document.getElementById("scholarship-apps-table-body");
+    if (!tbody) return;
+
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-gray-500">No scholarship applications matching filters.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(app => {
+        const isCancelled = app.is_cancelled || app.status === "CANCELLED";
+        const status = (app.status || (isCancelled ? "CANCELLED" : "SUBMITTED")).toUpperCase();
+        let badgeClass = "badge-yellow";
+        if (status === "APPROVED") badgeClass = "badge-green";
+        if (status === "REJECTED" || isCancelled) badgeClass = "badge-red";
+
+        // Summary of key answers
+        let summary = [];
+        if (app.age) summary.push(`Age: ${app.age}`);
+        if (app.dob) summary.push(`DOB: ${String(app.dob).substring(0, 10)}`);
+        if (app.family_annual_income) summary.push(`Income: ₹${Number(app.family_annual_income).toLocaleString('en-IN')}`);
+        if (app.parent_guardian_name) summary.push(`Parent: ${app.parent_guardian_name}`);
+        if (app.defence_relationship) summary.push(`Ward: ${app.defence_relationship}`);
+        if (app.supporting_person_name) summary.push(`Personnel: ${app.supporting_person_name}`);
+        if (app.current_grade) summary.push(`Grade: ${app.current_grade}`);
+        if (app.loss_year) summary.push(`Loss Year: ${app.loss_year}`);
+        const summaryText = summary.join(" • ") || "Standard Application";
+
+        // Document count / badges
+        let docBadges = [];
+        if (app.age_proof_document) docBadges.push("Age Proof");
+        if (app.applicant_id_document) docBadges.push("Applicant ID");
+        if (app.parent_id_document) docBadges.push("Parent ID");
+        if (app.aadhaar_document) docBadges.push("Aadhaar");
+        if (app.defence_id_document) docBadges.push("Defence ID");
+
+        return `
+            <tr class="hover:bg-white/[0.02] transition">
+                <td class="p-4">
+                    <div class="font-bold text-white">${escapeHtml(app.full_name || "Applicant")}</div>
+                    <div class="text-[10px] text-cyan-300 font-mono">${escapeHtml(app.phone || "")}</div>
+                    <div class="text-[10px] text-gray-500">${escapeHtml(app.email || "")}</div>
+                </td>
+                <td class="p-4">
+                    <span class="badge badge-purple text-[9px] mb-1">${escapeHtml(app.category)}</span>
+                    <div class="font-bold text-white text-xs">${escapeHtml(app.category_title || app.category)}</div>
+                </td>
+                <td class="p-4">
+                    <div class="text-gray-300 text-xs">${escapeHtml(summaryText)}</div>
+                </td>
+                <td class="p-4">
+                    <div class="flex flex-wrap gap-1">
+                        ${docBadges.map(b => `<span class="badge badge-cyan text-[8px]">${b}</span>`).join("") || '<span class="text-gray-500 text-[10px]">No docs</span>'}
+                    </div>
+                </td>
+                <td class="p-4 text-gray-500 text-[11px]">${String(app.created_at || "").substring(0, 10)}</td>
+                <td class="p-4"><span class="badge ${badgeClass}">${status}</span></td>
+                <td class="p-4 text-right space-x-1 whitespace-nowrap">
+                    <button onclick="viewScholarshipAppDetails(${app.id})" class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-gray-200 font-bold text-[10px]" title="Inspect All Answers">View All</button>
+                    ${!isCancelled && status === "SUBMITTED" ? `
+                        <button onclick="approveScholarshipApp(${app.id})" class="px-2.5 py-1 rounded bg-emerald-400/20 hover:bg-emerald-400/30 text-emerald-300 font-bold text-[10px]" title="Approve & Trigger Email"><i class="fa-solid fa-check mr-1"></i> Approve</button>
+                        <button onclick="rejectScholarshipApp(${app.id})" class="px-2 py-1 rounded bg-red-400/20 hover:bg-red-400/30 text-red-300 font-bold text-[10px]" title="Reject"><i class="fa-solid fa-xmark mr-1"></i> Reject</button>
+                    ` : ''}
+                </td>
+            </tr>
+        `;
+    }).join("");
+}
+
+async function approveScholarshipApp(id) {
+    if (!confirm("Approve this scholarship application?\n\nAn automated approval confirmation email will be triggered to the applicant.")) {
+        return;
+    }
+
+    try {
+        const res = await adminFetch(`/admin/scholarship-applications/${id}/approve`, { method: "POST" });
+        showAdminToast(res.message || "Scholarship application approved & email sent.", "success");
+        await loadScholarshipApplications();
+        loadAdminStats();
+    } catch (err) {
+        showAdminToast(err.message, "error");
+    }
+}
+
+async function rejectScholarshipApp(id) {
+    if (!confirm("Reject this scholarship application?")) {
+        return;
+    }
+
+    try {
+        const res = await adminFetch(`/admin/scholarship-applications/${id}/reject`, { method: "POST" });
+        showAdminToast(res.message || "Scholarship application rejected.", "info");
+        await loadScholarshipApplications();
+        loadAdminStats();
+    } catch (err) {
+        showAdminToast(err.message, "error");
+    }
+}
+
+function viewScholarshipAppDetails(id) {
+    const app = (allScholarshipAppsData || []).find(a => a.id === id);
+    if (!app) return;
+
+    document.getElementById("sch-detail-badge").textContent = app.category;
+    document.getElementById("sch-detail-title").textContent = app.full_name + " — " + (app.category_title || app.category);
+    document.getElementById("sch-detail-applied").textContent = `Applied on: ${String(app.created_at || "").substring(0, 19)}`;
+
+    let fields = [
+        { label: "Full Name", value: app.full_name },
+        { label: "Email", value: app.email },
+        { label: "Phone", value: app.phone }
+    ];
+
+    if (app.age) fields.push({ label: "Current Age", value: `${app.age} years` });
+    if (app.dob) fields.push({ label: "Date of Birth", value: String(app.dob).substring(0, 10) });
+    if (app.family_annual_income) fields.push({ label: "Family Annual Income", value: `₹${Number(app.family_annual_income).toLocaleString('en-IN')}` });
+    if (app.parent_guardian_name) fields.push({ label: "Parent / Guardian Name", value: app.parent_guardian_name });
+    if (app.defence_relationship) fields.push({ label: "Defence Relationship", value: app.defence_relationship });
+    if (app.supporting_person_name) fields.push({ label: "Supporting Person Name", value: app.supporting_person_name });
+    if (app.current_grade) fields.push({ label: "Current Grade / Year", value: app.current_grade });
+    if (app.maintained_grade) fields.push({ label: "Maintained Grade / Year", value: app.maintained_grade });
+    if (app.stationery_required) fields.push({ label: "Stationery Required", value: app.stationery_required });
+    if (app.resources_required) fields.push({ label: "Other Resources Required", value: app.resources_required });
+    if (app.required_resources_list) fields.push({ label: "List of Required Resources", value: app.required_resources_list });
+    if (app.loss_year) fields.push({ label: "Parent Loss Year", value: app.loss_year });
+    fields.push({ label: "Application Status", value: app.status || "SUBMITTED" });
+
+    // Documents
+    let docs = [];
+    if (app.age_proof_document) docs.push({ name: "Age Proof Document", url: app.age_proof_document });
+    if (app.applicant_id_document) docs.push({ name: "Applicant ID Proof", url: app.applicant_id_document });
+    if (app.parent_id_document) docs.push({ name: "Parent / Guardian ID Proof", url: app.parent_id_document });
+    if (app.aadhaar_document) docs.push({ name: "Aadhaar Card", url: app.aadhaar_document });
+    if (app.defence_id_document) docs.push({ name: "Defence Personnel ID Proof", url: app.defence_id_document });
+
+    const contentBox = document.getElementById("sch-detail-content");
+    contentBox.innerHTML = `
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-darkbg/70 border border-gray-800">
+            ${fields.map(f => `
+                <div>
+                    <span class="text-gray-500 block text-[10px] uppercase font-bold">${escapeHtml(f.label)}</span>
+                    <span class="font-bold text-gray-200">${escapeHtml(f.value)}</span>
+                </div>
+            `).join("")}
+        </div>
+
+        <div class="p-4 rounded-2xl bg-darkbg/70 border border-gray-800 space-y-2">
+            <h4 class="font-bold text-xs text-white uppercase tracking-wider">Uploaded Verification Documents</h4>
+            ${docs.length ? `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    ${docs.map(d => `
+                        <a href="${escapeHtml(d.url)}" target="_blank" download="${escapeHtml(d.name)}" class="p-2.5 rounded-xl bg-white/5 hover:bg-cyan-400/10 border border-gray-700 flex items-center justify-between text-cyan-300 font-bold text-xs transition">
+                            <span class="truncate"><i class="fa-solid fa-file-pdf mr-1 text-red-400"></i> ${escapeHtml(d.name)}</span>
+                            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                        </a>
+                    `).join("")}
+                </div>
+            ` : '<p class="text-gray-500 text-xs">No documents uploaded.</p>'}
+        </div>
+    `;
+
+    const actionsBox = document.getElementById("sch-detail-actions");
+    const isPending = (app.status || "SUBMITTED").toUpperCase() === "SUBMITTED" && !app.is_cancelled;
+    actionsBox.innerHTML = `
+        <button type="button" onclick="closeAdminModal('modal-scholarship-app-details')" class="px-5 py-2.5 rounded-xl bg-gray-800 text-white font-bold text-xs">Close</button>
+        ${isPending ? `
+            <button onclick="approveScholarshipApp(${app.id}); closeAdminModal('modal-scholarship-app-details');" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-darkbg font-black text-xs"><i class="fa-solid fa-check mr-1"></i> Approve & Send Email</button>
+            <button onclick="rejectScholarshipApp(${app.id}); closeAdminModal('modal-scholarship-app-details');" class="px-5 py-2.5 rounded-xl bg-red-500/20 text-red-300 font-bold text-xs hover:bg-red-500/30"><i class="fa-solid fa-xmark mr-1"></i> Reject</button>
+        ` : ''}
+    `;
+
+    openAdminModal("modal-scholarship-app-details");
+}
+
+// -------------------------------------------------------------------------
+// 9. APPLICATIONS MANAGEMENT (TRIALS & OPPORTUNITIES)
 // -------------------------------------------------------------------------
 async function loadApplications() {
     try {
@@ -1277,6 +1437,7 @@ function filterApplicationsTable() {
                 <td class="p-4">
                     <span class="badge ${isTrial ? 'badge-cyan' : 'badge-purple'} text-[9px] mb-1">${isTrial ? 'Trial' : 'Opportunity'}</span>
                     <div class="font-bold text-white text-xs">${escapeHtml(app.trial_name || app.opportunity_name || "Program")}</div>
+                    ${app.confirmed_trial_date ? `<div class="text-[10px] text-emerald-400 font-bold mt-0.5"><i class="fa-solid fa-calendar-check mr-1"></i>Booked: ${escapeHtml(app.confirmed_trial_date)} ${escapeHtml(app.confirmed_trial_time || '')}</div>` : ''}
                 </td>
                 <td class="p-4">
                     <div class="text-gray-300 font-semibold">${escapeHtml(app.sport || "")}</div>
@@ -1287,14 +1448,52 @@ function filterApplicationsTable() {
                 </td>
                 <td class="p-4 text-gray-500 text-[11px]">${String(app.created_at || "").substring(0, 10)}</td>
                 <td class="p-4"><span class="badge ${badgeClass}">${status}</span></td>
-                <td class="p-4 text-right space-x-1">
-                    <button onclick="updateApplicationStatus(${app.id}, '${isTrial ? 'trials' : 'opportunities'}', 'APPROVED')" class="px-2 py-1 rounded bg-emerald-400/15 hover:bg-emerald-400/25 text-emerald-400 font-bold text-[10px]" title="Approve">Approve</button>
+                <td class="p-4 text-right space-x-1 whitespace-nowrap">
+                    ${isTrial ? `
+                        <button onclick="openTrialBookingModal(${JSON.stringify(app).replace(/"/g, '&quot;')})" class="px-2.5 py-1 rounded bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-300 font-bold text-[10px]" title="Assign Date & Slot and Send Confirmation"><i class="fa-solid fa-calendar-plus mr-1"></i> Book Trial Date/Time</button>
+                    ` : `
+                        <button onclick="updateApplicationStatus(${app.id}, 'opportunities', 'APPROVED')" class="px-2 py-1 rounded bg-emerald-400/15 hover:bg-emerald-400/25 text-emerald-400 font-bold text-[10px]" title="Approve">Approve</button>
+                    `}
                     <button onclick="updateApplicationStatus(${app.id}, '${isTrial ? 'trials' : 'opportunities'}', 'SHORTLISTED')" class="px-2 py-1 rounded bg-purple-400/15 hover:bg-purple-400/25 text-purple-300 font-bold text-[10px]" title="Shortlist">Shortlist</button>
                     <button onclick="updateApplicationStatus(${app.id}, '${isTrial ? 'trials' : 'opportunities'}', 'REJECTED')" class="px-2 py-1 rounded bg-red-400/15 hover:bg-red-400/25 text-red-300 font-bold text-[10px]" title="Reject">Reject</button>
                 </td>
             </tr>
         `;
     }).join("");
+}
+
+function openTrialBookingModal(app) {
+    document.getElementById("trial-booking-app-id").value = app.id;
+    document.getElementById("trial-booking-athlete").value = app.athlete_name || "Athlete";
+    document.getElementById("trial-booking-trial-name").value = app.trial_name || "Trial Program";
+    document.getElementById("trial-booking-date").value = app.trial_date ? String(app.trial_date).substring(0, 10) : new Date().toISOString().substring(0, 10);
+    document.getElementById("trial-booking-time").value = "09:30 AM - 11:30 AM";
+    openAdminModal("modal-trial-booking");
+}
+
+async function submitAdminTrialBooking(e) {
+    e.preventDefault();
+    const id = document.getElementById("trial-booking-app-id").value;
+    const confirmedDate = document.getElementById("trial-booking-date").value;
+    const confirmedTime = document.getElementById("trial-booking-time").value.trim();
+
+    const btn = document.getElementById("trial-booking-btn");
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await adminFetch(`/admin/trial-applications/${id}/confirm-booking`, {
+            method: "POST",
+            body: { confirmedDate, confirmedTime }
+        });
+        showAdminToast(res.message || "Trial booking confirmed & email sent to athlete!", "success");
+        closeAdminModal("modal-trial-booking");
+        await loadApplications();
+        loadAdminStats();
+    } catch (err) {
+        showAdminToast(err.message, "error");
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 async function updateApplicationStatus(id, type, status) {

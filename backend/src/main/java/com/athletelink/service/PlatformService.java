@@ -1,6 +1,7 @@
 package com.athletelink.service;
 
 import java.time.LocalDate;
+import java.time.Period;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.athletelink.dto.AchievementRequest;
 import com.athletelink.dto.BookingRequest;
 import com.athletelink.dto.CoachConnectionRequest;
+import com.athletelink.dto.ScholarshipApplicationRequest;
 import com.athletelink.dto.TrialApplicationRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.annotation.PostConstruct;
 
@@ -26,8 +30,12 @@ public class PlatformService {
     private final JdbcTemplate jdbc;
     private final EmailService emailService;
     private final String publicBaseUrl;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public PlatformService(JdbcTemplate jdbc, EmailService emailService, @org.springframework.beans.factory.annotation.Value("${athletelink.public-base-url:http://localhost:8880}") String publicBaseUrl) {
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^[6-9]\\d{9}$");
+
+    public PlatformService(JdbcTemplate jdbc, EmailService emailService, @org.springframework.beans.factory.annotation.Value("${athletelink.public-base-url:http://localhost:8080}") String publicBaseUrl) {
         this.jdbc = jdbc;
         this.emailService = emailService;
         this.publicBaseUrl = publicBaseUrl.replaceAll("/$", "");
@@ -35,8 +43,7 @@ public class PlatformService {
 
     @PostConstruct
     public void initialize() {
-        // Safe, non-destructive migrations for databases created by earlier demos.
-        // Create the authentication table first because every platform table references users(id).
+        // Core tables
         jdbc.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(100) NOT NULL, email VARCHAR(150) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, sport VARCHAR(100) NULL, location VARCHAR(150) NULL, latitude DECIMAL(10,7) NULL, longitude DECIMAL(10,7) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbc.execute("CREATE TABLE IF NOT EXISTS achievements (id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT NOT NULL, title VARCHAR(150) NOT NULL, event_location VARCHAR(150) NULL, achieved_on DATE NULL, result_label VARCHAR(100) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_achievements_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         addColumnIfMissing("achievements", "achievement_type", "VARCHAR(40) NULL");
@@ -59,6 +66,8 @@ public class PlatformService {
         jdbc.execute("CREATE TABLE IF NOT EXISTS trial_slots (id BIGINT AUTO_INCREMENT PRIMARY KEY, trial_id BIGINT NOT NULL, slot_date DATE NOT NULL, slot_time TIME NOT NULL, capacity INT NOT NULL, booked_count INT NOT NULL DEFAULT 0, CONSTRAINT fk_trial_slots_trial FOREIGN KEY (trial_id) REFERENCES trials(id) ON DELETE CASCADE, CONSTRAINT uq_trial_slot UNIQUE(trial_id, slot_date, slot_time)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbc.execute("CREATE TABLE IF NOT EXISTS trial_applications (id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT NOT NULL, trial_id BIGINT NOT NULL, athlete_name VARCHAR(120) NOT NULL, email VARCHAR(180) NOT NULL, phone VARCHAR(40), sport VARCHAR(100) NOT NULL, position_role VARCHAR(100) NOT NULL, age INT, institution VARCHAR(180), experience TEXT, achievements TEXT, introduction TEXT, skills TEXT, additional_info TEXT, status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_trial_app_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, CONSTRAINT fk_trial_app_trial FOREIGN KEY(trial_id) REFERENCES trials(id) ON DELETE CASCADE, CONSTRAINT uq_trial_application UNIQUE(user_id, trial_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         addColumnIfMissing("trial_applications", "location", "VARCHAR(180) NULL");
+        addColumnIfMissing("trial_applications", "confirmed_trial_date", "DATE NULL");
+        addColumnIfMissing("trial_applications", "confirmed_trial_time", "VARCHAR(30) NULL");
         jdbc.execute("CREATE TABLE IF NOT EXISTS trial_application_confirmations (id BIGINT AUTO_INCREMENT PRIMARY KEY, application_id BIGINT NOT NULL UNIQUE, user_id BIGINT NOT NULL, email VARCHAR(180) NOT NULL, confirmation_token VARCHAR(120) NOT NULL UNIQUE, email_sent BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, confirmed_at DATETIME NULL, CONSTRAINT fk_trial_app_confirmation FOREIGN KEY(application_id) REFERENCES trial_applications(id) ON DELETE CASCADE, CONSTRAINT fk_trial_app_confirmation_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbc.execute("CREATE TABLE IF NOT EXISTS applications (id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT NOT NULL, opportunity_id VARCHAR(80) NOT NULL, opportunity_name VARCHAR(180) NOT NULL, status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT uq_application UNIQUE(user_id, opportunity_id), CONSTRAINT fk_application_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbc.execute("CREATE TABLE IF NOT EXISTS scouts (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL, organization VARCHAR(180) NOT NULL, sports VARCHAR(180) NOT NULL, specialization VARCHAR(180) NOT NULL, experience VARCHAR(100) NOT NULL, location VARCHAR(150) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -72,6 +81,48 @@ public class PlatformService {
         jdbc.execute("CREATE TABLE IF NOT EXISTS notifications (id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT NOT NULL, title VARCHAR(180) NOT NULL, message VARCHAR(500) NOT NULL, is_read BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbc.execute("CREATE TABLE IF NOT EXISTS email_verifications (id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT NOT NULL, token VARCHAR(120) NOT NULL UNIQUE, expires_at DATETIME NOT NULL, verified BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_verification_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbc.execute("CREATE TABLE IF NOT EXISTS booking_confirmations (id BIGINT AUTO_INCREMENT PRIMARY KEY, booking_id BIGINT NOT NULL UNIQUE, user_id BIGINT NOT NULL, email VARCHAR(180) NOT NULL, confirmation_token VARCHAR(120) NOT NULL UNIQUE, email_sent BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, confirmed_at DATETIME NULL, CONSTRAINT fk_confirmation_booking FOREIGN KEY(booking_id) REFERENCES bookings(id) ON DELETE CASCADE, CONSTRAINT fk_confirmation_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Scholarship Applications & Quota Enforcement
+        jdbc.execute("CREATE TABLE IF NOT EXISTS scholarship_applications (" +
+                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
+                "user_id BIGINT NOT NULL, " +
+                "category VARCHAR(60) NOT NULL, " +
+                "category_title VARCHAR(180) NOT NULL, " +
+                "full_name VARCHAR(120) NOT NULL, " +
+                "email VARCHAR(180) NOT NULL, " +
+                "phone VARCHAR(40) NOT NULL, " +
+                "age INT NULL, " +
+                "dob DATE NULL, " +
+                "family_income DECIMAL(12,2) NULL, " +
+                "parent_guardian_name VARCHAR(120) NULL, " +
+                "defence_relationship VARCHAR(60) NULL, " +
+                "supporting_person_name VARCHAR(120) NULL, " +
+                "current_grade VARCHAR(80) NULL, " +
+                "maintained_grade VARCHAR(80) NULL, " +
+                "stationery_required VARCHAR(10) NULL, " +
+                "resources_required VARCHAR(10) NULL, " +
+                "required_resources_list TEXT NULL, " +
+                "loss_year INT NULL, " +
+                "documents_json LONGTEXT NULL, " +
+                "status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED', " +
+                "admin_notes VARCHAR(500) NULL, " +
+                "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, " +
+                "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, " +
+                "CONSTRAINT fk_scholarship_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        jdbc.execute("CREATE TABLE IF NOT EXISTS scholarship_quota_log (" +
+                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
+                "user_id BIGINT NOT NULL, " +
+                "email VARCHAR(180) NOT NULL, " +
+                "phone VARCHAR(40) NULL, " +
+                "application_id BIGINT NOT NULL, " +
+                "category VARCHAR(60) NOT NULL, " +
+                "status VARCHAR(40) NOT NULL DEFAULT 'SUBMITTED', " +
+                "applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, " +
+                "UNIQUE KEY uq_quota_user (user_id), " +
+                "CONSTRAINT fk_quota_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         seedTrialsAndSlots();
         seedScouts();
@@ -90,7 +141,6 @@ public class PlatformService {
         seedFeaturedTrial("U18 Athletics", "Athletics", "Open / Youth", "U18", "National Junior Athletics Network", "Jawaharlal Nehru Stadium, New Delhi", LocalDate.of(2026,9,18), 40);
         seedFeaturedTrial("U19 Women's Hockey", "Hockey", "Women's", "U19", "Hockey India Youth Selection", "Kalinga Stadium, Bhubaneswar", LocalDate.of(2026,9,24), 32);
         seedFeaturedTrial("U21 Men's Cricket", "Cricket", "Men's", "U21", "Indian Youth Cricket Selection", "M. Chinnaswamy Stadium, Bengaluru", LocalDate.of(2026,9,29), 28);
-        // Preserve the original trials for existing users and records. They are not featured on the dashboard.
         seedLegacyTrial("National Federation Open Trials", "Athletics & Track", "National Sports Federation", "Jawaharlal Nehru Stadium, New Delhi", LocalDate.of(2026,9,15));
         seedLegacyTrial("Khelo India Regional Trials", "Multi-sport", "Khelo India", "Sree Kanteerava Stadium, Bengaluru", LocalDate.of(2026,9,22));
         seedLegacyTrial("Youth Boxing Selection Camp", "Boxing", "National Boxing Federation", "Army Sports Institute, Pune", LocalDate.of(2026,9,30));
@@ -138,6 +188,326 @@ public class PlatformService {
         jdbc.update("INSERT IGNORE INTO coaches(id,name,organization,sports,specialization,experience,location,latitude,longitude) VALUES(5,?,?,?,?,?,?,?,?)", "Neha Kapoor", "Hyderabad Elite Sports Academy", "Badminton, Athletics", "Junior athlete development", "10 years", "Hyderabad, Telangana", 17.3850, 78.4867);
     }
 
+    // =========================================================================
+    // SCHOLARSHIP APPLICATIONS (5 CATEGORIES + ONE-PER-PERSON RULE)
+    // =========================================================================
+
+    @Transactional
+    public Map<String, Object> applyScholarship(long userId, ScholarshipApplicationRequest req) {
+        // Normalize Category Key
+        String category = normalizeCategory(req.getCategory(), req.getCategoryTitle());
+        String categoryTitle = getStandardCategoryTitle(category);
+
+        // 1. STRICT ONE SCHOLARSHIP PER PERSON CHECK
+        List<Map<String, Object>> quotaLogs = jdbc.queryForList(
+                "SELECT * FROM scholarship_quota_log WHERE user_id=? OR email=?", userId, clean(req.getEmail()));
+        if (!quotaLogs.isEmpty()) {
+            Map<String, Object> existingLog = quotaLogs.get(0);
+            String logStatus = Objects.toString(existingLog.get("status"), "SUBMITTED");
+            if ("CANCELLED".equalsIgnoreCase(logStatus)) {
+                throw new IllegalStateException("You have already used your scholarship application. Cancelling an application does not allow you to apply for another scholarship.");
+            } else {
+                throw new IllegalStateException("You have already applied for a scholarship. You can apply for only one scholarship.");
+            }
+        }
+
+        // Secondary check on scholarship_applications table
+        List<Map<String, Object>> existingApps = jdbc.queryForList(
+                "SELECT * FROM scholarship_applications WHERE user_id=? OR email=?", userId, clean(req.getEmail()));
+        if (!existingApps.isEmpty()) {
+            Map<String, Object> latest = existingApps.get(0);
+            String status = Objects.toString(latest.get("status"), "SUBMITTED");
+            if ("CANCELLED".equalsIgnoreCase(status)) {
+                throw new IllegalStateException("You have already used your scholarship application. Cancelling an application does not allow you to apply for another scholarship.");
+            } else {
+                throw new IllegalStateException("You have already applied for a scholarship. You can apply for only one scholarship.");
+            }
+        }
+
+        // 2. COMMON FIELD VALIDATION
+        String fullName = clean(req.getFullName());
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("Full name is required.");
+        }
+
+        String email = clean(req.getEmail());
+        if (email == null || !EMAIL_PATTERN.matcher(email).matches()) {
+            throw new IllegalArgumentException("Please enter a valid email address.");
+        }
+
+        String phone = clean(req.getPhone());
+        if (phone != null) phone = phone.replaceAll("[^0-9]", "");
+        if (phone == null || !PHONE_PATTERN.matcher(phone).matches()) {
+            throw new IllegalArgumentException("Please enter a valid 10-digit Indian mobile number.");
+        }
+
+        Map<String, String> docs = req.getDocuments() != null ? req.getDocuments() : new LinkedHashMap<>();
+
+        // 3. CATEGORY-SPECIFIC VALIDATION
+        LocalDate dob = null;
+        Integer age = req.getAge();
+        Double familyIncome = req.getFamilyIncome();
+        String parentGuardianName = clean(req.getParentGuardianName());
+        String defenceRelationship = clean(req.getDefenceRelationship());
+        String supportingPersonName = clean(req.getSupportingPersonName());
+        String currentGrade = clean(req.getCurrentGrade());
+        String maintainedGrade = clean(req.getMaintainedGrade());
+        String stationery = clean(req.getStationeryRequired());
+        String resources = clean(req.getResourcesRequired());
+        String requiredResourcesList = clean(req.getRequiredResourcesList());
+        Integer lossYear = req.getLossYear();
+
+        LocalDate today = LocalDate.now();
+
+        switch (category) {
+            case "UNDER_18":
+                if (age == null || age < 1 || age >= 18) {
+                    throw new IllegalArgumentException("Age must be below 18 for this scholarship.");
+                }
+                dob = parseDate(req.getDob());
+                if (dob == null) {
+                    throw new IllegalArgumentException("Date of birth is required.");
+                }
+                if (dob.isAfter(today)) {
+                    throw new IllegalArgumentException("Date of birth cannot be a future date.");
+                }
+                int calculatedAgeU18 = Period.between(dob, today).getYears();
+                if (calculatedAgeU18 >= 18) {
+                    throw new IllegalArgumentException("Date of birth corresponds to age 18 or above. Age must be below 18.");
+                }
+                if (familyIncome == null || familyIncome <= 0) {
+                    throw new IllegalArgumentException("Family annual income must be a valid positive amount.");
+                }
+                if (docs.get("ageProof") == null || docs.get("ageProof").isBlank()) {
+                    throw new IllegalArgumentException("Age proof document (Birth Certificate / Aadhaar Card) is required.");
+                }
+                if (parentGuardianName == null || parentGuardianName.isBlank()) {
+                    throw new IllegalArgumentException("Parent/Guardian name is required.");
+                }
+                if (docs.get("parentGuardianId") == null || docs.get("parentGuardianId").isBlank()) {
+                    throw new IllegalArgumentException("Parent/Guardian ID proof document is required.");
+                }
+                break;
+
+            case "ABOVE_18":
+                if (age == null || age < 18) {
+                    throw new IllegalArgumentException("Age must be 18 or above for this scholarship.");
+                }
+                dob = parseDate(req.getDob());
+                if (dob == null) {
+                    throw new IllegalArgumentException("Date of birth is required.");
+                }
+                if (dob.isAfter(today)) {
+                    throw new IllegalArgumentException("Date of birth cannot be a future date.");
+                }
+                int calculatedAgeA18 = Period.between(dob, today).getYears();
+                if (calculatedAgeA18 < 18) {
+                    throw new IllegalArgumentException("Date of birth corresponds to age below 18. Age must be 18 or above.");
+                }
+                if (familyIncome == null || familyIncome <= 0) {
+                    throw new IllegalArgumentException("Family annual income must be a valid positive amount.");
+                }
+                if (docs.get("ageProof") == null || docs.get("ageProof").isBlank()) {
+                    throw new IllegalArgumentException("Age proof document is required.");
+                }
+                if (docs.get("applicantId") == null || docs.get("applicantId").isBlank()) {
+                    throw new IllegalArgumentException("Applicant ID proof document is required.");
+                }
+                break;
+
+            case "WOMEN":
+                // Category 3: Simple & focused - only Full Name, Email, Phone, Aadhaar Card
+                String aadhaarDoc = docs.get("aadhaarCard") != null ? docs.get("aadhaarCard") : docs.get("applicantId");
+                if (aadhaarDoc == null || aadhaarDoc.isBlank()) {
+                    throw new IllegalArgumentException("Aadhaar Card document upload is mandatory.");
+                }
+                docs.put("aadhaarCard", aadhaarDoc);
+                break;
+
+            case "DEFENCE":
+                if (defenceRelationship == null || (!defenceRelationship.equalsIgnoreCase("Mother") && !defenceRelationship.equalsIgnoreCase("Father") && !defenceRelationship.equalsIgnoreCase("Other blood relative only"))) {
+                    throw new IllegalArgumentException("Defence personnel relationship must be selected from Mother, Father, or Other blood relative only.");
+                }
+                if (supportingPersonName == null || supportingPersonName.isBlank()) {
+                    throw new IllegalArgumentException("Supporting person's full name is required.");
+                }
+                if (currentGrade == null || currentGrade.isBlank()) {
+                    throw new IllegalArgumentException("Current grade/year of study is required.");
+                }
+                if (maintainedGrade == null || maintainedGrade.isBlank()) {
+                    throw new IllegalArgumentException("Grade/year being maintained is required.");
+                }
+                if (stationery == null || (!stationery.equalsIgnoreCase("Yes") && !stationery.equalsIgnoreCase("No"))) {
+                    throw new IllegalArgumentException("Please indicate whether you require stationery (Yes/No).");
+                }
+                if (resources == null || (!resources.equalsIgnoreCase("Yes") && !resources.equalsIgnoreCase("No"))) {
+                    throw new IllegalArgumentException("Please indicate whether you require other educational resources/support (Yes/No).");
+                }
+                if ("Yes".equalsIgnoreCase(resources) && (requiredResourcesList == null || requiredResourcesList.isBlank())) {
+                    throw new IllegalArgumentException("Please list the required educational resources and support.");
+                }
+                if (docs.get("applicantId") == null || docs.get("applicantId").isBlank()) {
+                    throw new IllegalArgumentException("Applicant ID proof is required.");
+                }
+                if (docs.get("defenceId") == null || docs.get("defenceId").isBlank()) {
+                    throw new IllegalArgumentException("Defence personnel/supporting person's ID proof is required.");
+                }
+                break;
+
+            case "SINGLE_PARENT":
+                int currentYear = today.getYear();
+                if (lossYear == null || lossYear < 1960 || lossYear > currentYear) {
+                    throw new IllegalArgumentException("Please enter a valid year when parent was lost (cannot be in the future).");
+                }
+                if (familyIncome == null || familyIncome <= 0) {
+                    throw new IllegalArgumentException("Family annual income must be a valid positive amount.");
+                }
+                if (docs.get("applicantId") == null || docs.get("applicantId").isBlank()) {
+                    throw new IllegalArgumentException("Applicant ID proof is mandatory.");
+                }
+                break;
+
+            default:
+                throw new IllegalArgumentException("Unknown scholarship category: " + category);
+        }
+
+        // 4. SERIALIZE DOCUMENTS
+        String docsJson = req.getDocumentsJson();
+        if (docsJson == null || docsJson.isBlank()) {
+            try {
+                docsJson = objectMapper.writeValueAsString(docs);
+            } catch (Exception e) {
+                docsJson = "{}";
+            }
+        }
+
+        // 5. INSERT SCHOLARSHIP APPLICATION
+        jdbc.update("INSERT INTO scholarship_applications(" +
+                "user_id, category, category_title, full_name, email, phone, age, dob, family_income, " +
+                "parent_guardian_name, defence_relationship, supporting_person_name, current_grade, " +
+                "maintained_grade, stationery_required, resources_required, required_resources_list, " +
+                "loss_year, documents_json, status" +
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'SUBMITTED')",
+                userId, category, categoryTitle, fullName, email, phone, age, dob, familyIncome,
+                parentGuardianName, defenceRelationship, supportingPersonName, currentGrade,
+                maintainedGrade, stationery, resources, requiredResourcesList, lossYear, docsJson);
+
+        Long appId = jdbc.queryForObject("SELECT id FROM scholarship_applications WHERE user_id=? ORDER BY id DESC LIMIT 1", Long.class, userId);
+
+        // 6. RECORD QUOTA USAGE (PERMANENT LOG)
+        jdbc.update("INSERT INTO scholarship_quota_log(user_id, email, phone, application_id, category, status) VALUES(?,?,?,?,?, 'SUBMITTED')",
+                userId, email, phone, appId, category);
+
+        // 7. SEND SUBMISSION CONFIRMATION EMAIL
+        boolean sent = emailService.sendScholarshipSubmissionEmail(email, fullName, categoryTitle);
+
+        // 8. ADD NOTIFICATION
+        jdbc.update("INSERT INTO notifications(user_id, title, message) VALUES(?,?,?)",
+                userId, "Scholarship Application Received",
+                "Your application for " + categoryTitle + " has been successfully submitted and is awaiting review.");
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("applicationId", appId);
+        res.put("category", category);
+        res.put("categoryTitle", categoryTitle);
+        res.put("status", "SUBMITTED");
+        res.put("emailSent", sent);
+        res.put("message", "Your scholarship application has been successfully submitted and is awaiting review.");
+        return res;
+    }
+
+    @Transactional
+    public Map<String, Object> cancelScholarship(long userId, long applicationId) {
+        List<Map<String, Object>> apps = jdbc.queryForList(
+                "SELECT * FROM scholarship_applications WHERE id=? AND user_id=?", applicationId, userId);
+        if (apps.isEmpty()) {
+            throw new IllegalArgumentException("Scholarship application not found.");
+        }
+        Map<String, Object> app = apps.get(0);
+        String currentStatus = Objects.toString(app.get("status"), "");
+        if ("APPROVED".equalsIgnoreCase(currentStatus)) {
+            throw new IllegalStateException("Approved scholarship applications cannot be cancelled.");
+        }
+        if ("CANCELLED".equalsIgnoreCase(currentStatus)) {
+            throw new IllegalStateException("Application is already cancelled.");
+        }
+
+        jdbc.update("UPDATE scholarship_applications SET status='CANCELLED' WHERE id=?", applicationId);
+        jdbc.update("UPDATE scholarship_quota_log SET status='CANCELLED' WHERE application_id=?", applicationId);
+
+        jdbc.update("INSERT INTO notifications(user_id, title, message) VALUES(?,?,?)",
+                userId, "Scholarship Application Cancelled",
+                "Your scholarship application for " + app.get("category_title") + " has been cancelled. Note: Quota remains consumed.");
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("applicationId", applicationId);
+        out.put("status", "CANCELLED");
+        out.put("message", "Application cancelled successfully.");
+        return out;
+    }
+
+    public Map<String, Object> getMyScholarshipApplication(long userId) {
+        List<Map<String, Object>> list = jdbc.queryForList(
+                "SELECT * FROM scholarship_applications WHERE user_id=? ORDER BY id DESC LIMIT 1", userId);
+        if (list.isEmpty()) {
+            // Check quota log
+            List<Map<String, Object>> quota = jdbc.queryForList(
+                    "SELECT * FROM scholarship_quota_log WHERE user_id=? ORDER BY id DESC LIMIT 1", userId);
+            if (!quota.isEmpty()) {
+                Map<String, Object> q = quota.get(0);
+                Map<String, Object> stub = new LinkedHashMap<>();
+                stub.put("hasUsedQuota", true);
+                stub.put("status", q.get("status"));
+                stub.put("category", q.get("category"));
+                stub.put("categoryTitle", getStandardCategoryTitle(Objects.toString(q.get("category"), "")));
+                return stub;
+            }
+            return Map.of("hasUsedQuota", false);
+        }
+        Map<String, Object> app = list.get(0);
+        app.put("hasUsedQuota", true);
+        return app;
+    }
+
+    public List<Map<String, Object>> scholarshipApplications(long userId) {
+        return jdbc.queryForList("SELECT * FROM scholarship_applications WHERE user_id=? ORDER BY id DESC", userId);
+    }
+
+    private String normalizeCategory(String category, String title) {
+        String combined = (Objects.toString(category, "") + " " + Objects.toString(title, "")).toUpperCase();
+        if (combined.contains("UNDER 18") || combined.contains("UNDER_18") || combined.contains("U18") || combined.contains("YOUTH SCHOLARSHIP")) {
+            return "UNDER_18";
+        }
+        if (combined.contains("ABOVE 18") || combined.contains("ABOVE_18") || combined.contains("ADULT")) {
+            return "ABOVE_18";
+        }
+        if (combined.contains("WOMEN") || combined.contains("FEMALE")) {
+            return "WOMEN";
+        }
+        if (combined.contains("DEFENCE") || combined.contains("DEFENSE") || combined.contains("ARMED")) {
+            return "DEFENCE";
+        }
+        if (combined.contains("SINGLE") || combined.contains("PARENT")) {
+            return "SINGLE_PARENT";
+        }
+        return Objects.toString(category, "UNDER_18").toUpperCase();
+    }
+
+    private String getStandardCategoryTitle(String cat) {
+        return switch (cat) {
+            case "UNDER_18" -> "Scholarship for Under 18";
+            case "ABOVE_18" -> "Scholarship for Above 18";
+            case "WOMEN" -> "Scholarship for Women";
+            case "DEFENCE" -> "Scholarships for Children of Defence Personnel";
+            case "SINGLE_PARENT" -> "Scholarship for Single Parents";
+            default -> cat;
+        };
+    }
+
+    // =========================================================================
+    // ACHIEVEMENTS & TRIALS & OTHER PLATFORM METHODS
+    // =========================================================================
+
     public List<Map<String,Object>> achievements(long userId) {
         return jdbc.queryForList("SELECT id,title,achievement_type,sport,level,achievement_year,academic_year,institution,position,result_label,medal_award,event_location,achieved_on,description,certificate_details,certificate_url,created_at FROM achievements WHERE user_id=? ORDER BY achievement_year DESC, achieved_on DESC, id DESC", userId);
     }
@@ -159,9 +529,6 @@ public class PlatformService {
     @Transactional
     public Map<String,Object> applyTrial(long userId,long trialId,TrialApplicationRequest r) {
         Map<String,Object> t=trial(trialId);
-        if(!Objects.equals(clean(r.getSport()), Objects.toString(t.get("sport"),"")) && !Objects.toString(t.get("sport"),"").toLowerCase().contains(clean(r.getSport()).toLowerCase())) {
-            // Sport mismatch is allowed for multi-sport trials; no hard rejection.
-        }
         Integer existing=jdbc.queryForObject("SELECT COUNT(*) FROM trial_applications WHERE user_id=? AND trial_id=?",Integer.class,userId,trialId);
         if(existing!=null && existing>0) throw new IllegalStateException("You have already applied for this trial.");
         jdbc.update("INSERT INTO trial_applications(user_id,trial_id,athlete_name,email,phone,location,sport,position_role,age,institution,experience,achievements,introduction,skills,additional_info,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'SUBMITTED')",userId,trialId,clean(r.getAthleteName()),clean(r.getEmail()),clean(r.getPhone()),clean(r.getLocation()),clean(r.getSport()),clean(r.getPosition()),r.getAge(),clean(r.getInstitution()),clean(r.getExperience()),clean(r.getAchievements()),clean(r.getIntroduction()),clean(r.getSkills()),clean(r.getAdditionalInfo()));
@@ -174,10 +541,22 @@ public class PlatformService {
         jdbc.update("INSERT INTO notifications(user_id,title,message) VALUES(?,?,?)",userId,"Trial application submitted","Your application for " + t.get("name") + " has been submitted.");
         Map<String,Object> out=new LinkedHashMap<>(); out.put("applicationId",id); out.put("status","SUBMITTED"); out.put("trial",t.get("name")); out.put("trialId",trialId); out.put("emailSent",sent); out.put("confirmationUrl",link); return out;
     }
-    public List<Map<String,Object>> applications(long userId){ return jdbc.queryForList("SELECT a.id application_id,a.status,a.created_at,a.updated_at,a.athlete_name,a.email,a.phone,a.location,a.sport,a.position_role,a.age,a.institution,a.experience,a.achievements,a.introduction,a.skills,a.additional_info,tc.email_sent,tc.confirmation_token,t.id trial_id,t.name trial_name,t.organization,t.venue,t.trial_date FROM trial_applications a JOIN trials t ON t.id=a.trial_id LEFT JOIN trial_application_confirmations tc ON tc.application_id=a.id WHERE a.user_id=? ORDER BY a.created_at DESC",userId); }
-    public Map<String,Object> application(long userId,long id){ return jdbc.queryForMap("SELECT a.id application_id,a.status,a.created_at,a.updated_at,a.athlete_name,a.email,a.phone,a.location,a.sport,a.position_role,a.age,a.institution,a.experience,a.achievements,a.introduction,a.skills,a.additional_info,tc.email_sent,tc.confirmation_token,t.id trial_id,t.name trial_name,t.organization,t.venue,t.trial_date FROM trial_applications a JOIN trials t ON t.id=a.trial_id LEFT JOIN trial_application_confirmations tc ON tc.application_id=a.id WHERE a.user_id=? AND a.id=?",userId,id); }
+    public List<Map<String,Object>> applications(long userId){ return jdbc.queryForList("SELECT a.id application_id,a.status,a.created_at,a.updated_at,a.athlete_name,a.email,a.phone,a.location,a.sport,a.position_role,a.age,a.institution,a.experience,a.achievements,a.introduction,a.skills,a.additional_info,a.confirmed_trial_date,a.confirmed_trial_time,tc.email_sent,tc.confirmation_token,t.id trial_id,t.name trial_name,t.organization,t.venue,t.trial_date FROM trial_applications a JOIN trials t ON t.id=a.trial_id LEFT JOIN trial_application_confirmations tc ON tc.application_id=a.id WHERE a.user_id=? ORDER BY a.created_at DESC",userId); }
+    public Map<String,Object> application(long userId,long id){ return jdbc.queryForMap("SELECT a.id application_id,a.status,a.created_at,a.updated_at,a.athlete_name,a.email,a.phone,a.location,a.sport,a.position_role,a.age,a.institution,a.experience,a.achievements,a.introduction,a.skills,a.additional_info,a.confirmed_trial_date,a.confirmed_trial_time,tc.email_sent,tc.confirmation_token,t.id trial_id,t.name trial_name,t.organization,t.venue,t.trial_date FROM trial_applications a JOIN trials t ON t.id=a.trial_id LEFT JOIN trial_application_confirmations tc ON tc.application_id=a.id WHERE a.user_id=? AND a.id=?",userId,id); }
 
-    public Map<String,Object> confirmTrialApplication(String token){ Map<String,Object> c=jdbc.queryForMap("SELECT a.id application_id,tc.email_sent,a.athlete_name,a.email,t.name trial_name,t.sport,t.venue,t.trial_date FROM trial_application_confirmations tc JOIN trial_applications a ON a.id=tc.application_id JOIN trials t ON t.id=a.trial_id WHERE tc.confirmation_token=?",token); jdbc.update("UPDATE trial_application_confirmations SET confirmed_at=NOW() WHERE confirmation_token=? AND confirmed_at IS NULL",token); c.put("confirmed",true); c.put("status","CONFIRMED"); return c; }
+    public Map<String,Object> confirmTrialApplication(String token){
+        try {
+            List<Map<String,Object>> list = jdbc.queryForList("SELECT a.id application_id,tc.email_sent,tc.created_at,tc.confirmed_at,a.athlete_name,a.email,a.phone,a.sport,a.age,a.position_role,a.institution,t.id as trial_id,t.name trial_name,t.sport as trial_sport,t.organization,t.venue,t.trial_date FROM trial_application_confirmations tc JOIN trial_applications a ON a.id=tc.application_id JOIN trials t ON t.id=a.trial_id WHERE tc.confirmation_token=?",token);
+            if (list.isEmpty()) return null;
+            Map<String,Object> c = new LinkedHashMap<>(list.get(0));
+            jdbc.update("UPDATE trial_application_confirmations SET confirmed_at=NOW() WHERE confirmation_token=? AND confirmed_at IS NULL",token);
+            c.put("confirmed",true);
+            c.put("status","CONFIRMED");
+            return c;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     public List<Map<String,Object>> scouts(){ return jdbc.queryForList("SELECT id,name,organization,sports,specialization,experience,location FROM scouts ORDER BY id"); }
     public Map<String,Object> connect(long userId,long scoutId,CoachConnectionRequest r){
@@ -215,9 +594,17 @@ public class PlatformService {
     public List<Map<String,Object>> bookings(long userId){return jdbc.queryForList("SELECT b.id booking_id,b.booking_status status,b.confirmation_token,b.created_at,s.id slot_id,s.slot_date,s.slot_time,t.id trial_id,t.name trial_name,t.sport,t.organization,t.venue,bc.email_sent,bc.confirmed_at FROM bookings b JOIN trial_slots s ON s.id=b.slot_id JOIN trials t ON t.id=b.trial_id LEFT JOIN booking_confirmations bc ON bc.booking_id=b.id WHERE b.user_id=? ORDER BY s.slot_date,s.slot_time",userId);}
     public Map<String,Object> booking(long userId,long id){return jdbc.queryForMap("SELECT b.id booking_id,b.booking_status status,b.confirmation_token,b.created_at,s.id slot_id,s.slot_date,s.slot_time,t.id trial_id,t.name trial_name,t.sport,t.organization,t.venue,bc.email_sent,bc.confirmed_at FROM bookings b JOIN trial_slots s ON s.id=b.slot_id JOIN trials t ON t.id=b.trial_id LEFT JOIN booking_confirmations bc ON bc.booking_id=b.id WHERE b.user_id=? AND b.id=?",userId,id);}
     public Map<String,Object> confirm(String token){
-        Map<String,Object> c=jdbc.queryForMap("SELECT b.id booking_id,bc.user_id,bc.email_sent,s.slot_date,s.slot_time,t.name trial_name,t.sport,t.venue FROM booking_confirmations bc JOIN bookings b ON b.id=bc.booking_id JOIN trial_slots s ON s.id=b.slot_id JOIN trials t ON t.id=b.trial_id WHERE bc.confirmation_token=?",token);
-        jdbc.update("UPDATE booking_confirmations SET confirmed_at=NOW() WHERE confirmation_token=? AND confirmed_at IS NULL",token);
-        c.put("confirmed",true); c.put("status","CONFIRMED"); return c;
+        try {
+            List<Map<String,Object>> list = jdbc.queryForList("SELECT b.id booking_id,b.booking_status,bc.user_id,bc.email_sent,bc.created_at,bc.confirmed_at,u.full_name as athlete_name,u.email,s.slot_date,s.slot_time,t.id as trial_id,t.name trial_name,t.sport,t.organization,t.venue FROM booking_confirmations bc JOIN bookings b ON b.id=bc.booking_id JOIN trial_slots s ON s.id=b.slot_id JOIN trials t ON t.id=b.trial_id JOIN users u ON u.id=b.user_id WHERE bc.confirmation_token=?",token);
+            if (list.isEmpty()) return null;
+            Map<String,Object> c = new LinkedHashMap<>(list.get(0));
+            jdbc.update("UPDATE booking_confirmations SET confirmed_at=NOW() WHERE confirmation_token=? AND confirmed_at IS NULL",token);
+            c.put("confirmed",true);
+            c.put("status","CONFIRMED");
+            return c;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public List<Map<String,Object>> opportunities(){
@@ -260,7 +647,6 @@ public class PlatformService {
             if(u.get("latitude")!=null && u.get("longitude")!=null){ lat=((Number)u.get("latitude")).doubleValue(); lon=((Number)u.get("longitude")).doubleValue(); }
         }
         if(lat==null || lon==null) return coachesWithDistance(userId, null, null, radiusKm);
-        // Persist the latest consented browser location so future sessions can reuse it.
         jdbc.update("UPDATE users SET latitude=?, longitude=? WHERE id=?",lat,lon,userId);
         return coachesWithDistance(userId,lat,lon,radiusKm);
     }
@@ -305,7 +691,17 @@ public class PlatformService {
 
     public List<Map<String,Object>> coachConnections(long userId){return jdbc.queryForList("SELECT c.id,c.status,c.message,c.created_at,c.updated_at,ch.id coach_id,ch.name,ch.organization,ch.sports,ch.specialization,ch.experience,ch.location FROM coach_connections c JOIN coaches ch ON ch.id=c.coach_id WHERE c.user_id=? ORDER BY c.created_at DESC",userId);}
 
-    public Map<String,Object> dashboard(long userId){Map<String,Object> m=new LinkedHashMap<>();m.put("achievements",achievements(userId));m.put("applications",applications(userId));m.put("bookings",bookings(userId));m.put("connections",connections(userId));m.put("notifications",notifications(userId));return m;}
+    public Map<String,Object> dashboard(long userId){
+        Map<String,Object> m=new LinkedHashMap<>();
+        m.put("achievements",achievements(userId));
+        m.put("applications",applications(userId));
+        m.put("scholarshipApplications",scholarshipApplications(userId));
+        m.put("myScholarship",getMyScholarshipApplication(userId));
+        m.put("bookings",bookings(userId));
+        m.put("connections",connections(userId));
+        m.put("notifications",notifications(userId));
+        return m;
+    }
     private LocalDate parseDate(String v){return v==null||v.isBlank()?null:LocalDate.parse(v);}
     private String clean(String v){return v==null?null:v.trim();}
 }

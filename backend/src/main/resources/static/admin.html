@@ -33,7 +33,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Config script -->
     <script src="./js/config.js"></script>
-    <script src="./js/client-db.js"></script>
     <style>
         body {
             font-family: 'Outfit', sans-serif;
@@ -166,7 +165,7 @@
             <button id="sidebar-toggle-btn" class="lg:hidden p-2 rounded-xl bg-white/5 border border-white/10 text-cyan-300 hover:bg-white/10">
                 <i class="fa-solid fa-bars text-lg"></i>
             </button>
-            <a href="index.html" class="flex items-center gap-3">
+            <a href="/" class="flex items-center gap-3">
                 <div class="w-10 h-10 flex items-center justify-center">
                     <img src="https://i.ibb.co/nMdMJfM7/Screenshot-2026-07-30-115340.png" alt="AthleteLink Logo" class="w-10 h-10 object-contain">
                 </div>
@@ -181,7 +180,7 @@
         </div>
 
         <div class="flex items-center gap-3">
-            <a href="index.html" class="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-gray-300 hover:text-white hover:bg-white/10 transition">
+            <a href="/" class="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-gray-300 hover:text-white hover:bg-white/10 transition">
                 <i class="fa-solid fa-globe text-cyan-400"></i> Public Website
             </a>
             
@@ -719,35 +718,89 @@
 
 
             <!-- ================= TAB 8: SCHOLARSHIPS MANAGEMENT ================= -->
-            <section id="tab-scholarships" class="hidden space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                        <h2 class="text-2xl font-black">Scholarship Programs</h2>
-                        <p class="text-xs text-gray-400">Manage sports grants & endowments across 5 categories including Armed-Forces & Single-Parent wards.</p>
+            <section id="tab-scholarships" class="hidden space-y-8">
+                <!-- Sub-section 1: Scholarship Programs Catalog -->
+                <div class="space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="text-2xl font-black">Scholarship Programs</h2>
+                            <p class="text-xs text-gray-400">Manage sports grants & endowments across 5 categories including Armed-Forces & Single-Parent wards.</p>
+                        </div>
+                        <button onclick="openAddScholarshipModal()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-darkbg font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:opacity-95 transition">
+                            <i class="fa-solid fa-plus"></i> Add Scholarship
+                        </button>
                     </div>
-                    <button onclick="openAddScholarshipModal()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-darkbg font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:opacity-95 transition">
-                        <i class="fa-solid fa-plus"></i> Add Scholarship
-                    </button>
+
+                    <div class="glass-card rounded-2xl border border-gray-800 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-white/5 border-b border-gray-800 text-gray-400 font-bold uppercase text-[10px]">
+                                    <tr>
+                                        <th class="p-4">Title & Organization</th>
+                                        <th class="p-4">Category</th>
+                                        <th class="p-4">Eligibility Criteria</th>
+                                        <th class="p-4">Stipend / Benefits</th>
+                                        <th class="p-4">Deadline</th>
+                                        <th class="p-4">Status</th>
+                                        <th class="p-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scholarships-table-body" class="divide-y divide-gray-800">
+                                    <tr><td colspan="7" class="p-6 text-center text-gray-500">Loading scholarships…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="glass-card rounded-2xl border border-gray-800 overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-xs">
-                            <thead class="bg-white/5 border-b border-gray-800 text-gray-400 font-bold uppercase text-[10px]">
-                                <tr>
-                                    <th class="p-4">Title & Organization</th>
-                                    <th class="p-4">Category</th>
-                                    <th class="p-4">Eligibility Criteria</th>
-                                    <th class="p-4">Stipend / Benefits</th>
-                                    <th class="p-4">Deadline</th>
-                                    <th class="p-4">Status</th>
-                                    <th class="p-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="scholarships-table-body" class="divide-y divide-gray-800">
-                                <tr><td colspan="7" class="p-6 text-center text-gray-500">Loading scholarships…</td></tr>
-                            </tbody>
-                        </table>
+                <!-- Sub-section 2: Submitted Scholarship Applications Review & Approval -->
+                <div class="space-y-4 pt-6 border-t border-gray-800/80">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-400/10 border border-cyan-400/30 text-cyan-300 text-[10px] font-black uppercase tracking-widest">
+                                <i class="fa-solid fa-file-signature"></i> 5-Category Applications
+                            </div>
+                            <h3 class="text-xl font-black text-white mt-2">Scholarship Applications & Approvals</h3>
+                            <p class="text-xs text-gray-400">Review answers, verify uploaded ID/age/proof documents, and approve applications with automated email notifications.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="scholarship-apps-filter-cat" onchange="filterScholarshipAppsTable()" class="form-input w-48">
+                                <option value="ALL">All 5 Categories</option>
+                                <option value="UNDER_18">Under 18</option>
+                                <option value="ABOVE_18">Above 18</option>
+                                <option value="WOMEN">Women</option>
+                                <option value="DEFENCE_CHILDREN">Children of Defence</option>
+                                <option value="SINGLE_PARENT">Single Parents</option>
+                            </select>
+                            <select id="scholarship-apps-filter-status" onchange="filterScholarshipAppsTable()" class="form-input w-36">
+                                <option value="ALL">All Status</option>
+                                <option value="SUBMITTED">SUBMITTED</option>
+                                <option value="APPROVED">APPROVED</option>
+                                <option value="REJECTED">REJECTED</option>
+                                <option value="CANCELLED">CANCELLED</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="glass-card rounded-2xl border border-gray-800 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-white/5 border-b border-gray-800 text-gray-400 font-bold uppercase text-[10px]">
+                                    <tr>
+                                        <th class="p-4">Applicant & Contact</th>
+                                        <th class="p-4">Scholarship Category</th>
+                                        <th class="p-4">Key Criteria / Details</th>
+                                        <th class="p-4">Uploaded Documents</th>
+                                        <th class="p-4">Submitted On</th>
+                                        <th class="p-4">Status</th>
+                                        <th class="p-4 text-right">Approval Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scholarship-apps-table-body" class="divide-y divide-gray-800">
+                                    <tr><td colspan="7" class="p-6 text-center text-gray-500">Loading scholarship applications…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -1274,6 +1327,66 @@
         </div>
     </div>
 
+    <!-- SCHOLARSHIP APPLICATION DETAILS & VERIFICATION MODAL -->
+    <div id="modal-scholarship-app-details" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="max-w-2xl mx-auto mt-8 mb-8 glass-card rounded-3xl border border-gray-700 p-6 sm:p-8 space-y-6">
+            <div class="flex justify-between items-start border-b border-gray-800 pb-4">
+                <div>
+                    <span id="sch-detail-badge" class="badge badge-purple text-[10px]">Scholarship Category</span>
+                    <h3 id="sch-detail-title" class="text-xl font-black text-white mt-1">Applicant Details</h3>
+                    <p id="sch-detail-applied" class="text-xs text-gray-400 mt-0.5">Applied on ...</p>
+                </div>
+                <button onclick="closeAdminModal('modal-scholarship-app-details')" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- Content Area -->
+            <div id="sch-detail-content" class="space-y-4 text-xs">
+                <!-- Dynamically injected -->
+            </div>
+
+            <div id="sch-detail-actions" class="flex justify-end gap-3 pt-4 border-t border-gray-800">
+                <!-- Dynamically injected Approve / Reject buttons -->
+            </div>
+        </div>
+    </div>
+
+    <!-- TRIAL BOOKING DATE & TIME CONFIRMATION MODAL (Admin) -->
+    <div id="modal-trial-booking" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="max-w-md mx-auto mt-16 glass-card rounded-3xl border border-cyan-400/30 p-6 sm:p-8 space-y-5">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="text-xl font-black text-white">Confirm Trial Booking</h3>
+                    <p id="trial-booking-meta" class="text-xs text-gray-400 mt-1">Select date and slot time to assign to athlete and send confirmation email.</p>
+                </div>
+                <button onclick="closeAdminModal('modal-trial-booking')" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+
+            <form id="form-trial-booking" onsubmit="submitAdminTrialBooking(event)" class="space-y-4">
+                <input type="hidden" id="trial-booking-app-id">
+                <div>
+                    <label class="form-label">Athlete</label>
+                    <input type="text" id="trial-booking-athlete" readonly class="form-input bg-darkbg/50 opacity-80 text-cyan-300 font-bold">
+                </div>
+                <div>
+                    <label class="form-label">Trial Program</label>
+                    <input type="text" id="trial-booking-trial-name" readonly class="form-input bg-darkbg/50 opacity-80 text-white font-bold">
+                </div>
+                <div>
+                    <label class="form-label">Confirmed Trial Date *</label>
+                    <input type="date" id="trial-booking-date" required class="form-input">
+                </div>
+                <div>
+                    <label class="form-label">Confirmed Slot Time *</label>
+                    <input type="text" id="trial-booking-time" required class="form-input" placeholder="e.g. 09:30 AM - 11:30 AM">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeAdminModal('modal-trial-booking')" class="px-5 py-2.5 rounded-xl bg-gray-800 text-white font-bold text-xs">Cancel</button>
+                    <button type="submit" id="trial-booking-btn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-darkbg font-black text-xs">Confirm & Send Email</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- ADMIN LOGIN MODAL (When not authenticated as Admin) -->
     <div id="modal-admin-login" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md p-4 flex items-center justify-center">
         <div class="max-w-md w-full glass-card rounded-3xl border border-cyan-400/30 p-8 glow-blue relative">
@@ -1306,7 +1419,7 @@
                     <i class="fa-solid fa-wand-magic-sparkles"></i> 1-Click Demo Admin Login
                 </button>
                 <div>
-                    <a href="index.html" class="text-xs text-gray-500 hover:text-gray-300">← Return to AthleteLink Public Website</a>
+                    <a href="/" class="text-xs text-gray-500 hover:text-gray-300">← Return to AthleteLink Public Website</a>
                 </div>
             </div>
         </div>

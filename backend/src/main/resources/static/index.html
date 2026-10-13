@@ -29,7 +29,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <!-- App configuration: points to the Spring Boot backend -->
     <script src="./js/config.js"></script>
-    <script src="./js/client-db.js"></script>
     <style>
 
     /* ===============================
@@ -318,7 +317,7 @@
 
         <div id="auth-buttons-guest" class="flex items-center gap-3">
 
-            <a href="admin.html"
+            <a href="/admin.html"
                 class="hidden md:flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-cyan-400/20 bg-cyan-400/5 text-cyan-300 text-xs font-bold hover:bg-cyan-400/15 transition">
                 <i class="fa-solid fa-shield-halved"></i>
                 Admin Portal
@@ -354,7 +353,7 @@
 
         <!-- AUTH BUTTONS (logged in) -->
         <div id="auth-buttons-user" class="hidden items-center gap-3">
-            <a id="nav-admin-link" href="admin.html" class="hidden items-center gap-1.5 px-3.5 py-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 text-xs font-bold hover:bg-cyan-400/20 transition">
+            <a id="nav-admin-link" href="/admin.html" class="hidden items-center gap-1.5 px-3.5 py-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 text-xs font-bold hover:bg-cyan-400/20 transition">
                 <i class="fa-solid fa-shield-halved"></i>
                 Admin Dashboard
             </a>
@@ -1165,6 +1164,10 @@
                         <div id="applications-list" class="space-y-3"><p class="text-xs text-gray-500">Loading applications…</p></div>
                     </div>
                     <div class="glass-card p-6 rounded-3xl border border-gray-800 space-y-4">
+                        <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-graduation-cap text-purple-400"></i> My Scholarship Application</h3>
+                        <div id="my-scholarship-card" class="space-y-3"><p class="text-xs text-gray-500">Loading scholarship status…</p></div>
+                    </div>
+                    <div class="glass-card p-6 rounded-3xl border border-gray-800 space-y-4">
                         <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-user-group text-accentNeon"></i> Scout Connections</h3>
                         <div id="connections-list" class="space-y-3"><p class="text-xs text-gray-500">Loading connections…</p></div>
                     </div>
@@ -1518,142 +1521,285 @@
 </section>
 
 
-<!-- ================= SCHOLARSHIP APPLICATION MODAL ================= -->
+<!-- ================= 5-CATEGORY SCHOLARSHIP APPLICATION MODAL ================= -->
 <div id="scholarshipModal"
-     class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+     class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto">
 
-    <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto glass-card rounded-3xl border border-gray-700 p-6">
+    <div class="w-full max-w-xl max-h-[92vh] overflow-y-auto glass-card rounded-3xl border border-cyan-500/30 p-6 sm:p-8 space-y-6 shadow-2xl shadow-cyan-950/50">
 
-        <div class="flex justify-between items-center mb-5">
+        <!-- Header -->
+        <div class="flex justify-between items-start border-b border-gray-800 pb-4">
             <div>
-                <p class="text-xs text-accentBlue font-bold uppercase tracking-wider">
-                    Scholarship Application
-                </p>
-
-                <h3 id="scholarshipTitle"
-                    class="text-2xl font-black mt-1">
+                <span id="scholarshipCategoryBadge" class="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-cyan-400/10 text-cyan-300 border border-cyan-400/30">
+                    Category Form
+                </span>
+                <h3 id="scholarshipTitle" class="text-2xl font-black mt-2 text-white">
                     Scholarship Application
                 </h3>
-            </div>
-
-            <button
-                type="button"
-                onclick="closeScholarshipForm()"
-                class="text-gray-400 hover:text-white text-2xl">
-                &times;
-            </button>
-        </div>
-
-        <form id="scholarshipForm" class="space-y-4">
-
-            <input type="hidden" id="selectedScholarship">
-
-            <div>
-                <label class="text-xs text-gray-400">Full Name</label>
-                <input
-                    id="scholarshipName"
-                    type="text"
-                    required
-                    class="w-full mt-1 p-3 rounded-xl bg-black/40 border border-gray-700 text-white outline-none focus:border-accentBlue"
-                    placeholder="Enter your full name">
-            </div>
-
-            <div>
-                <label class="text-xs text-gray-400">Email</label>
-                <input
-                    id="scholarshipEmail"
-                    type="email"
-                    required
-                    class="w-full mt-1 p-3 rounded-xl bg-black/40 border border-gray-700 text-white outline-none focus:border-accentBlue"
-                    placeholder="Enter your email">
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-
-                <div>
-                    <label class="text-xs text-gray-400">Phone</label>
-                    <input
-                        id="scholarshipPhone"
-                        type="tel"
-                        required
-                        class="w-full mt-1 p-3 rounded-xl bg-black/40 border border-gray-700 text-white outline-none focus:border-accentBlue"
-                        placeholder="Phone number">
-                </div>
-
-                <div>
-                    <label class="text-xs text-gray-400">Age</label>
-                    <input
-                        id="scholarshipAge"
-                        type="number"
-                        required
-                        min="1"
-                        max="100"
-                        class="w-full mt-1 p-3 rounded-xl bg-black/40 border border-gray-700 text-white outline-none focus:border-accentBlue"
-                        placeholder="Age">
-                </div>
-
-            </div>
-
-            <div>
-                <label class="text-xs text-gray-400">
-                    Why are you eligible?
-                </label>
-
-                <textarea
-                    id="scholarshipReason"
-                    required
-                    rows="3"
-                    class="w-full mt-1 p-3 rounded-xl bg-black/40 border border-gray-700 text-white outline-none focus:border-accentBlue"
-                    placeholder="Briefly explain your eligibility"></textarea>
-            </div>
-
-            <div>
-                <label class="text-xs text-gray-400">
-                    Verification Document
-                </label>
-
-                <input
-                    id="scholarshipDocument"
-                    type="file"
-                    required
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    class="w-full mt-1 p-3 rounded-xl bg-black/40 border border-gray-700 text-gray-300">
-                
-                <p class="text-[11px] text-gray-500 mt-1">
-                    Upload PDF, JPG or PNG for verification.
+                <p id="scholarshipSubtitle" class="text-xs text-gray-400 mt-1">
+                    Please complete all required fields below. * Required
                 </p>
             </div>
+            <button type="button" onclick="closeScholarshipForm()" class="text-gray-400 hover:text-white text-2xl p-1 leading-none">&times;</button>
+        </div>
 
-            <button
-                type="submit"
-                class="w-full py-3 rounded-xl bg-accentBlue hover:bg-accentNeon text-darkbg font-bold uppercase tracking-wider transition">
-                Submit Scholarship Application
-            </button>
+        <!-- Strict Single Quota Alert Box if already applied or cancelled -->
+        <div id="scholarshipQuotaWarning" class="hidden p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs leading-relaxed space-y-2">
+            <div class="font-black flex items-center gap-1.5 text-sm">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>One Scholarship Per Person Policy</span>
+            </div>
+            <p id="scholarshipQuotaMsg">You have already applied for a scholarship. You can apply for only one scholarship.</p>
+        </div>
 
+        <!-- Main Form -->
+        <form id="scholarshipForm" onsubmit="submitScholarshipApplication(event)" class="space-y-5" novalidate>
+            <input type="hidden" id="selectedScholarshipCategory" name="category">
+            <input type="hidden" id="selectedScholarshipTitle" name="categoryTitle">
+
+            <!-- COMMON QUESTIONS: Full Name, Email, Phone -->
+            <div class="space-y-1">
+                <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                    Full Name <span class="text-red-400 font-black">* Required</span>
+                </label>
+                <input type="text" id="scholarshipFullName" name="fullName" required class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="Enter your full name">
+                <span id="error-scholarshipFullName" class="inline-error text-[11px] text-red-400 hidden block mt-1">This field is required.</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Email Address <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="email" id="scholarshipEmail" name="email" required class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="example@domain.com">
+                    <span id="error-scholarshipEmail" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please enter a valid email address.</span>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Phone Number <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="tel" id="scholarshipPhone" name="phone" required maxlength="10" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="10-digit Indian mobile number">
+                    <span id="error-scholarshipPhone" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please enter a valid 10-digit Indian mobile number.</span>
+                </div>
+            </div>
+
+            <!-- CATEGORY 1 & 2: AGE & DOB & FAMILY INCOME -->
+            <div id="section-age-dob-income" class="hidden space-y-4 pt-2 border-t border-gray-800/80">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label id="label-scholarshipAge" class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Current Age <span class="text-red-400 font-black">* Required</span>
+                        </label>
+                        <input type="number" id="scholarshipAge" name="age" min="1" max="100" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="Age in years">
+                        <span id="error-scholarshipAge" class="inline-error text-[11px] text-red-400 hidden block mt-1">Age validation error.</span>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Date of Birth <span class="text-red-400 font-black">* Required</span>
+                        </label>
+                        <input type="date" id="scholarshipDob" name="dob" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition">
+                        <span id="error-scholarshipDob" class="inline-error text-[11px] text-red-400 hidden block mt-1">Date of birth is required and must match age.</span>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Family Annual Income (₹) <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="number" id="scholarshipFamilyIncome" name="familyIncome" min="1" step="any" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="e.g. 250000">
+                    <span id="error-scholarshipFamilyIncome" class="inline-error text-[11px] text-red-400 hidden block mt-1">Family annual income must be a valid positive amount.</span>
+                </div>
+            </div>
+
+            <!-- CATEGORY 1 SPECIFIC: PARENT/GUARDIAN -->
+            <div id="section-under18" class="hidden space-y-4 pt-2 border-t border-gray-800/80">
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Parent / Guardian Name <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="text" id="scholarshipParentName" name="parentGuardianName" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="Parent or guardian's full name">
+                    <span id="error-scholarshipParentName" class="inline-error text-[11px] text-red-400 hidden block mt-1">This field is required.</span>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Parent / Guardian ID Proof <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="file" id="scholarshipParentIdDoc" accept=".pdf,.jpg,.jpeg,.png" class="w-full p-2.5 rounded-xl bg-darkbg/80 border border-gray-700 text-gray-300 text-xs file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-cyan-400 file:text-darkbg">
+                    <p class="text-[10px] text-gray-500">Aadhaar / Voter ID / PAN Card (PDF, JPG, PNG max 5MB)</p>
+                    <span id="error-scholarshipParentIdDoc" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please upload a valid Parent/Guardian ID proof.</span>
+                </div>
+            </div>
+
+            <!-- AGE PROOF DOCUMENT (Category 1 & 2) -->
+            <div id="section-age-proof" class="hidden space-y-1 pt-2 border-t border-gray-800/80">
+                <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                    Age Proof Document <span class="text-red-400 font-black">* Required</span>
+                </label>
+                <input type="file" id="scholarshipAgeProofDoc" accept=".pdf,.jpg,.jpeg,.png" class="w-full p-2.5 rounded-xl bg-darkbg/80 border border-gray-700 text-gray-300 text-xs file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-cyan-400 file:text-darkbg">
+                <p class="text-[10px] text-gray-500">Birth Certificate, Aadhaar Card, or Other valid age-proof document (PDF, JPG, PNG max 5MB)</p>
+                <span id="error-scholarshipAgeProofDoc" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please upload a valid age proof document.</span>
+            </div>
+
+            <!-- APPLICANT ID PROOF (Category 2, 4, 5) -->
+            <div id="section-applicant-id" class="hidden space-y-1 pt-2 border-t border-gray-800/80">
+                <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                    Applicant ID Proof <span class="text-red-400 font-black">* Required</span>
+                </label>
+                <input type="file" id="scholarshipApplicantIdDoc" accept=".pdf,.jpg,.jpeg,.png" class="w-full p-2.5 rounded-xl bg-darkbg/80 border border-gray-700 text-gray-300 text-xs file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-cyan-400 file:text-darkbg">
+                <p class="text-[10px] text-gray-500">Aadhaar / Voter ID / Passport / Student ID (PDF, JPG, PNG max 5MB)</p>
+                <span id="error-scholarshipApplicantIdDoc" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please upload a valid applicant ID proof.</span>
+            </div>
+
+            <!-- CATEGORY 3 SPECIFIC: AADHAAR CARD FOR WOMEN -->
+            <div id="section-women" class="hidden space-y-1 pt-2 border-t border-gray-800/80">
+                <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                    Aadhaar Card <span class="text-red-400 font-black">* Required</span>
+                </label>
+                <input type="file" id="scholarshipWomenAadhaarDoc" accept=".pdf,.jpg,.jpeg,.png" class="w-full p-2.5 rounded-xl bg-darkbg/80 border border-gray-700 text-gray-300 text-xs file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-pink-500 file:text-white">
+                <p class="text-[10px] text-gray-500">Upload Applicant Aadhaar Card for verification (PDF, JPG, PNG max 5MB)</p>
+                <span id="error-scholarshipWomenAadhaarDoc" class="inline-error text-[11px] text-red-400 hidden block mt-1">Aadhaar upload is mandatory.</span>
+            </div>
+
+            <!-- CATEGORY 4 SPECIFIC: DEFENCE PERSONNEL -->
+            <div id="section-defence" class="hidden space-y-4 pt-2 border-t border-gray-800/80">
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Defence Personnel Relationship <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <select id="scholarshipDefenceRelationship" name="defenceRelationship" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition">
+                        <option value="">Select relationship…</option>
+                        <option value="Mother">Mother</option>
+                        <option value="Father">Father</option>
+                        <option value="Other blood relative only">Other blood relative only</option>
+                    </select>
+                    <span id="error-scholarshipDefenceRelationship" class="inline-error text-[11px] text-red-400 hidden block mt-1">Relationship must be selected from Mother, Father, or Other blood relative only.</span>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Supporting Person's Full Name <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="text" id="scholarshipSupportingName" name="supportingPersonName" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="Defence personnel full name">
+                    <span id="error-scholarshipSupportingName" class="inline-error text-[11px] text-red-400 hidden block mt-1">This field is required.</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Current Grade / Year of Study <span class="text-red-400 font-black">* Required</span>
+                        </label>
+                        <input type="text" id="scholarshipCurrentGrade" name="currentGrade" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="e.g. Class 11 / 2nd Year B.Sc">
+                        <span id="error-scholarshipCurrentGrade" class="inline-error text-[11px] text-red-400 hidden block mt-1">Grade/year field cannot be empty.</span>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Grade / Year Being Maintained <span class="text-red-400 font-black">* Required</span>
+                        </label>
+                        <input type="text" id="scholarshipMaintainedGrade" name="maintainedGrade" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="e.g. Grade A / 85%+ Aggregate">
+                        <span id="error-scholarshipMaintainedGrade" class="inline-error text-[11px] text-red-400 hidden block mt-1">Grade/year field cannot be empty.</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Do you require stationery? <span class="text-red-400 font-black">* Required</span>
+                        </label>
+                        <select id="scholarshipStationery" name="stationeryRequired" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition">
+                            <option value="">Select Yes or No…</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                        <span id="error-scholarshipStationery" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please select Yes or No.</span>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Other educational resources/support? <span class="text-red-400 font-black">* Required</span>
+                        </label>
+                        <select id="scholarshipResources" name="resourcesRequired" onchange="toggleDefenceResourcesList(this.value)" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition">
+                            <option value="">Select Yes or No…</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                        <span id="error-scholarshipResources" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please select Yes or No.</span>
+                    </div>
+                </div>
+
+                <div id="defence-resources-list-wrap" class="hidden space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        List the Required Resources <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <textarea id="scholarshipResourceList" name="requiredResourcesList" rows="3" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="List specific textbooks, online courses, training kits, or tutoring support required…"></textarea>
+                    <span id="error-scholarshipResourceList" class="inline-error text-[11px] text-red-400 hidden block mt-1">Please list the required resources when Yes is selected.</span>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Defence Personnel / Supporting Person's ID Proof <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="file" id="scholarshipDefenceIdDoc" accept=".pdf,.jpg,.jpeg,.png" class="w-full p-2.5 rounded-xl bg-darkbg/80 border border-gray-700 text-gray-300 text-xs file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-500 file:text-white">
+                    <p class="text-[10px] text-gray-500">Service ID / Discharge Book / Canteen Card / Dependent Card (PDF, JPG, PNG max 5MB)</p>
+                    <span id="error-scholarshipDefenceIdDoc" class="inline-error text-[11px] text-red-400 hidden block mt-1">Defence personnel ID proof is mandatory.</span>
+                </div>
+            </div>
+
+            <!-- CATEGORY 5 SPECIFIC: SINGLE PARENTS -->
+            <div id="section-single-parent" class="hidden space-y-4 pt-2 border-t border-gray-800/80">
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Which year did you lose one of your parents? <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="number" id="scholarshipLossYear" name="lossYear" min="1950" max="2026" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="e.g. 2019">
+                    <span id="error-scholarshipLossYear" class="inline-error text-[11px] text-red-400 hidden block mt-1">Year must be valid and cannot be in the future.</span>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        Family Annual Income (₹) <span class="text-red-400 font-black">* Required</span>
+                    </label>
+                    <input type="number" id="scholarshipSingleIncome" name="singleIncome" min="1" step="any" class="w-full p-3 rounded-xl bg-darkbg/80 border border-gray-700 text-white outline-none focus:border-cyan-400 text-sm transition" placeholder="e.g. 180000">
+                    <span id="error-scholarshipSingleIncome" class="inline-error text-[11px] text-red-400 hidden block mt-1">Family annual income must be a valid positive amount.</span>
+                </div>
+            </div>
+
+            <!-- SUBMIT BUTTON & GENERAL ERROR FEEDBACK -->
+            <div class="pt-4 border-t border-gray-800 space-y-3">
+                <div id="scholarshipFormGeneralError" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium"></div>
+
+                <button type="submit" id="scholarshipSubmitBtn" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-400 text-darkbg font-black text-sm uppercase tracking-wider shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-95 transition disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2">
+                    <span id="scholarshipSubmitBtnText">Submit Scholarship Application</span>
+                </button>
+            </div>
         </form>
     </div>
 </div>
 
-
 <!-- ================= SUCCESS POPUP ================= -->
 <div id="scholarshipSuccess"
-     class="fixed inset-0 z-[10000] hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+     class="fixed inset-0 z-[10000] hidden items-center justify-center bg-black/85 backdrop-blur-sm p-4">
 
-    <div class="glass-card w-full max-w-sm rounded-3xl border border-accentGreen/30 p-8 text-center">
+    <div class="glass-card w-full max-w-sm rounded-3xl border border-emerald-400/40 p-8 text-center space-y-4 shadow-2xl">
 
-        <div class="text-5xl mb-4">✓</div>
+        <div class="w-16 h-16 rounded-full bg-emerald-400/15 border border-emerald-400/40 text-emerald-400 text-3xl font-black mx-auto flex items-center justify-center">
+            ✓
+        </div>
 
-        <h3 class="text-2xl font-black mb-2">
+        <h3 class="text-2xl font-black text-white">
             Application Submitted!
         </h3>
 
-        <p class="text-sm text-gray-400 leading-relaxed">
-            Your scholarship application has been successfully submitted.
+        <p id="scholarshipSuccessMsg" class="text-sm text-gray-300 leading-relaxed">
+            Your scholarship application has been successfully submitted and is awaiting review.
         </p>
 
         <button
             onclick="closeScholarshipSuccess()"
-            class="mt-6 w-full py-3 rounded-xl bg-accentGreen hover:bg-emerald-400 text-darkbg font-bold uppercase tracking-wider">
+            class="w-full py-3 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-darkbg font-black text-xs uppercase tracking-wider transition">
             Done
         </button>
 

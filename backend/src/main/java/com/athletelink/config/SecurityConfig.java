@@ -59,7 +59,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/opportunities").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/announcements").permitAll()
                         .requestMatchers("/api/confirm-booking", "/api/trials/applications/confirm").permitAll()
-                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/health", "/actuator/health").permitAll()
                         .requestMatchers("/api/admin/**").authenticated()
                         .anyRequest().authenticated()
                 )
