@@ -18,7 +18,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const toggle = () => mobileMenu?.classList.toggle("hidden");
     mobileMenuBtn?.addEventListener("click", toggle); mobileMenuBtn2?.addEventListener("click", toggle);
     loadOpportunityCards();
+    loadLiveSportsPulse();
 });
+async function loadLiveSportsPulse() {
+    try {
+        const stats = await apiRequest("/stats");
+        if (!stats) return;
+        const athletesEl = document.getElementById("pulse-athletes-count");
+        if (athletesEl && stats.athletesRegistered !== undefined) athletesEl.textContent = stats.athletesRegistered;
+        const oppsEl = document.getElementById("pulse-opps-count");
+        if (oppsEl && stats.opportunitiesConnected !== undefined) oppsEl.textContent = stats.opportunitiesConnected;
+        const scoutsEl = document.getElementById("pulse-scouts-count");
+        if (scoutsEl && stats.scouts !== undefined) scoutsEl.textContent = stats.scouts;
+        const trialsEl = document.getElementById("pulse-trials-count");
+        if (trialsEl && stats.trialsAvailable !== undefined) trialsEl.textContent = stats.trialsAvailable;
+    } catch (e) { /* fallback to static real values */ }
+}
 function toggleMobileMenu(){document.getElementById("mobile-menu")?.classList.add("hidden");}
 function filterAthletes(){const q=(document.getElementById("athlete-search")?.value||"").toLowerCase();const sport=document.getElementById("filter-sport")?.value||"all";document.querySelectorAll(".athlete-card").forEach(c=>c.style.display=c.dataset.name.toLowerCase().includes(q)&&(sport==="all"||c.dataset.sport===sport)?"block":"none");}
 function showFeatureToast(message,type="info"){let t=document.getElementById("feature-toast");if(!t){t=document.createElement("div");t.id="feature-toast";document.body.appendChild(t);}t.className="fixed bottom-6 right-6 z-[200] max-w-md px-5 py-3 rounded-xl border shadow-2xl text-sm font-bold "+(type==="error"?"bg-red-950 border-red-500 text-red-200":(type==="success"?"bg-emerald-950 border-emerald-500 text-emerald-200":"bg-gray-950 border-accentBlue text-white"));t.textContent=message;clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.remove(),4000);}

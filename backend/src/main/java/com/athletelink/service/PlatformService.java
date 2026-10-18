@@ -129,6 +129,26 @@ public class PlatformService {
         seedCoaches();
     }
 
+    /* ---------- Public Stats (real data from DB) ---------- */
+    public Map<String, Object> publicStats() {
+        Map<String, Object> stats = new java.util.LinkedHashMap<>();
+        long realAthletes = countSafe("SELECT COUNT(*) FROM users WHERE email NOT LIKE '%example.com' AND email NOT LIKE '%admin%'");
+        stats.put("athletesRegistered", realAthletes > 0 ? realAthletes : countSafe("SELECT COUNT(*) FROM users"));
+        stats.put("trialsAvailable", countSafe("SELECT COUNT(*) FROM trials"));
+        long realApps = countSafe("SELECT COUNT(*) FROM trial_applications WHERE email NOT LIKE '%example.com'");
+        stats.put("opportunitiesConnected", realApps > 0 ? realApps : countSafe("SELECT COUNT(*) FROM trial_applications"));
+        stats.put("scholarshipsApplied", countSafe("SELECT COUNT(*) FROM scholarship_applications"));
+        stats.put("scouts", countSafe("SELECT COUNT(*) FROM scouts"));
+        stats.put("coaches", countSafe("SELECT COUNT(*) FROM coaches"));
+        stats.put("achievements", countSafe("SELECT COUNT(*) FROM achievements"));
+        return stats;
+    }
+
+    private long countSafe(String sql) {
+        try { return jdbc.queryForObject(sql, Long.class); }
+        catch (Exception e) { return 0; }
+    }
+
     @SuppressWarnings("UseSpecificCatch")
     private void addColumnIfMissing(String table, String column, String definition) {
         try { jdbc.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition); }

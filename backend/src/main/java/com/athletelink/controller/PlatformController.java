@@ -21,7 +21,7 @@ public class PlatformController {
     public PlatformController(PlatformService service){this.service=service;}
     private long id(Authentication a){return (Long)a.getPrincipal();}
 
-    @GetMapping("/health") public Map<String,String> health(){return Map.of("status","UP","app","AthleteLink AI");}
+    @GetMapping("/stats") public Map<String,Object> publicStats(){return service.publicStats();}
 
     @GetMapping("/achievements") public Object achievements(Authentication a){return service.achievements(id(a));}
     @GetMapping("/achievements/{x}") public Object achievement(Authentication a,@PathVariable long x){return service.achievement(id(a),x);}
